@@ -1,12 +1,14 @@
 @use 'theme/index';
 
 // Tokens the shared palette has no counterpart for: the ring around the change the diff bar steps to,
-// and the checkerboard behind transparent images. The color scheme gives native scroll bars,
-// form controls and media players the theme's colours.
+// the checkerboard behind transparent images, and the icons of presentations and OpenDocument files.
+// `color-scheme` gives native scroll bars, form controls and media players the theme's colours.
 :root[data-theme="light"] {
     --flash: #ffc400;
     --checker-light: #ffffff;
     --checker-dark: #e8e8e8;
+    --ft-presentation: #b7472a;
+    --ft-opendocument: #00695c;
     color-scheme: light;
 }
 
@@ -14,6 +16,8 @@
     --flash: #cca700;
     --checker-light: #2a2a2a;
     --checker-dark: #353535;
+    --ft-presentation: #f0896b;
+    --ft-opendocument: #4db6ac;
     color-scheme: dark;
 }
 
@@ -57,6 +61,16 @@ code, pre, .mono {
 button {
     font: inherit;
     cursor: pointer;
+}
+
+// The frame a document prints from, out of sight.
+.print-frame {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    width: 0;
+    height: 0;
+    border: 0;
 }
 
 .skip-link {
@@ -451,7 +465,7 @@ button {
         color: var(--ft-font);
     }
 
-    // A folder outline in the folder color; open folders show the open outline.
+    // A folder outline in the folder colour; open folders show the open outline.
     &[data-type="folder"] {
         align-self: stretch;
         color: var(--ft-folder);
@@ -755,6 +769,53 @@ button {
     align-items: center;
     color: var(--muted);
     font-size: 12px;
+}
+
+// Copy raw and Copy formatted, joined as one group; a narrow window folds them into one Copy button with a menu.
+.copy-actions {
+    display: inline-flex;
+    align-items: center;
+}
+
+.copy-buttons {
+    display: inline-flex;
+
+    > .button:not(:last-child) {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    > .button + .button {
+        margin-left: -1px;
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+
+    > .button:hover,
+    > .button:focus-visible {
+        position: relative;
+        z-index: 1;
+    }
+}
+
+.copy-menu-button {
+    display: none;
+}
+
+.copy-menu-chevron {
+    margin-left: 4px;
+    color: var(--faint);
+    font-size: 10px;
+}
+
+@media (max-width: 720px) {
+    .copy-buttons {
+        display: none;
+    }
+
+    .copy-menu-button {
+        display: inline-block;
+    }
 }
 
 .button {
@@ -1954,6 +2015,20 @@ button {
     white-space: nowrap;
 }
 
+// The Sheet pickers of a workbook compare.
+.row-diff-sheet {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.row-diff-sheet-select {
+    max-width: 180px;
+}
+
 .status-bar {
     display: flex;
     align-items: center;
@@ -2373,11 +2448,19 @@ button {
     border: 0;
 }
 
+// The frames of an HTML preview, stacked: the page shown on top, the next drawing loading beneath it.
+.html-preview-host {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+}
+
 // An HTML file's page keeps its own look: light, on white, whatever the studio's theme.
 .html-preview-frame {
-    flex: 1;
+    position: absolute;
+    inset: 0;
     width: 100%;
-    min-height: 0;
+    height: 100%;
     background: #ffffff;
     border: 0;
     color-scheme: light;
@@ -3179,7 +3262,7 @@ body[data-resizing] {
     overflow: auto;
 }
 
-// Table view — virtualized grid for CSV / XLSX previews.
+// Table view — virtualised grid for CSV / XLSX previews.
 .table-view {
     display: flex;
     flex-direction: column;
@@ -3344,6 +3427,107 @@ body[data-resizing] {
 
 .table-notice {
     color: var(--warn, var(--muted));
+}
+
+.table-body:focus {
+    outline: none;
+}
+
+.table-body:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+// Sheet tabs along the bottom of a workbook's table, as in Excel.
+.sheet-tabs {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    min-width: 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface-sunken);
+    font-size: 12px;
+}
+
+.sheet-tabs-list {
+    display: flex;
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.sheet-tab {
+    flex: 0 0 auto;
+    max-width: 220px;
+    padding: 5px 14px;
+    overflow: hidden;
+    border: 0;
+    border-right: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &:hover {
+        background: var(--surface);
+        color: var(--text);
+    }
+
+    &[data-active="true"] {
+        background: var(--surface);
+        color: var(--accent);
+        font-weight: 600;
+        box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    &[data-hidden-sheet="true"] {
+        font-style: italic;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+    }
+}
+
+.sheet-tabs-scroll,
+.sheet-tabs-hidden {
+    flex: 0 0 auto;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    cursor: pointer;
+    transition: color 0.12s ease;
+
+    &:hover:not(:disabled) {
+        color: var(--text);
+    }
+
+    &:disabled {
+        color: var(--faint);
+        cursor: default;
+    }
+}
+
+.sheet-tabs-scroll {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.sheet-tabs-hidden {
+    margin-left: auto;
+    white-space: nowrap;
 }
 
 // Large files: fixed-height rows so the virtual window can place them by arithmetic.
@@ -4964,6 +5148,12 @@ body[data-resizing] {
         white-space: nowrap;
     }
 
+    .sheet-tab,
+    .sheet-tabs-scroll,
+    .sheet-tabs-hidden {
+        min-height: 36px;
+    }
+
     .button {
         min-height: 36px;
         white-space: nowrap;
@@ -5304,12 +5494,16 @@ body[data-resizing="vertical"] {
     font-weight: 600;
 }
 
+// Fills the table area, so a workbook's sheet tabs stay at the bottom under a single value.
 .query-scalar {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+    min-height: 0;
     padding: 16px 12px;
+    overflow: auto;
 }
 
 .query-scalar-label {

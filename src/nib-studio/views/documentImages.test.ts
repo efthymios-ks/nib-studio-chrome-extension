@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { asRoot, FakeDirectoryHandle } from '../../common/fs/testing/fakeFileSystem.js';
 import { HEIC_NOT_DECODED_MESSAGE } from '../../common/image/imageFormat.js';
-import { createDocumentImageConverter } from './documentImages.js';
+import { externalTabPath } from '../app/store.js';
+import { createDocumentImageConverter, withDocumentImagesAsync } from './documentImages.js';
 import type { DecodedPixels } from './imageDecodeClient.js';
 
 const PIXELS: DecodedPixels = { width: 2, height: 1, pixels: new Uint8ClampedArray(8), pageCount: 1 };
@@ -37,5 +39,32 @@ describe('createDocumentImageConverter', () => {
         });
 
         await expect(convertAsync('tiff', new Blob(['tiff']))).rejects.toThrow('The TIFF file holds no image.');
+    });
+});
+
+describe('withDocumentImagesAsync', () => {
+    const root = asRoot(new FakeDirectoryHandle('workspace'));
+
+    it('reads the pictures of a workspace document from the workspace, and gives back what the render made', async () => {
+        const result = await withDocumentImagesAsync('docs/a.md', root, async (context) => ({
+            documentPath: context.documentPath,
+            hasResources: context.resources != null,
+        }));
+
+        expect(result).toEqual({ documentPath: 'docs/a.md', hasResources: true });
+    });
+
+    it('reads no pictures for a file from outside the workspace, or with no workspace open', async () => {
+        const outside = await withDocumentImagesAsync(externalTabPath(1, 'a.md'), root, async (context) => context);
+        const noWorkspace = await withDocumentImagesAsync('docs/a.md', null, async (context) => context.resources);
+
+        expect(outside).toEqual({ documentPath: null, resources: null });
+        expect(noWorkspace).toBeNull();
+    });
+
+    it('passes a failed render on', async () => {
+        await expect(withDocumentImagesAsync('docs/a.md', root, async () => {
+            throw new Error('Render failed.');
+        })).rejects.toThrow('Render failed.');
     });
 });

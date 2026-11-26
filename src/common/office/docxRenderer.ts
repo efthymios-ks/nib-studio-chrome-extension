@@ -71,7 +71,7 @@ const DOCX_ID_PREFIX = 'word-';
 const DISPLAYABLE_IMAGE = /^data:image\/(?:png|jpeg|gif|webp|bmp|avif|svg\+xml|x-icon|vnd\.microsoft\.icon);base64,/i;
 
 // Converts with mammoth, which emits semantic HTML without inline styles or fonts; pictures come inline as data: URIs,
-// at the size the document gives them, and the result is sanitized.
+// at the size the document gives them, and the result is sanitised.
 export async function renderDocxToHtmlAsync(input: ArrayBuffer, options: DocxRenderOptions = {}): Promise<DocxHtmlResult> {
     const mammoth = await loadMammothAsync();
     const sizeOf = imageSizeLookup(options.imageSizes ?? new Map());

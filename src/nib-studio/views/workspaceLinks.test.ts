@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { attachWorkspaceLinks, handleWorkspaceLinkClick, linkActionFor, type WorkspaceLinkOptions } from './workspaceLinks.js';
+import { attachWorkspaceLinks, followLink, handleWorkspaceLinkClick, linkActionFor, type WorkspaceLinkOptions } from './workspaceLinks.js';
 import { toastTexts } from '../testing/testHelpers.js';
 
 function linkIn(container: HTMLElement, href: string): HTMLAnchorElement {
@@ -151,5 +151,35 @@ describe('attachWorkspaceLinks', () => {
         click(workspaceLink);
 
         expect(onOpen).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('followLink', () => {
+    it('follows a link of a page the studio can\'t reach into, as a click on it does', () => {
+        const onOpen = vi.fn();
+        const onFollow = vi.fn();
+        const onFragment = vi.fn();
+        const options: WorkspaceLinkOptions = { documentPath: 'docs/page.html', onOpen, onFollow, onFragment };
+
+        followLink('guide.md#setup', options);
+        followLink('https://example.com/', options);
+        followLink('#top', options);
+        followLink('../../outside.md', options);
+        followLink('', options);
+
+        expect(onOpen).toHaveBeenCalledWith({ path: 'docs/guide.md', fragment: 'setup' });
+        expect(onFollow).toHaveBeenCalledWith('https://example.com/');
+        expect(onFragment).toHaveBeenCalledWith('top');
+        expect(toastTexts()).toContain('../../outside.md is outside the workspace.');
+        expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens a web link in a new browser tab when the page takes none itself', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+        followLink('tel:+441234567890', { documentPath: null, onOpen: vi.fn() });
+
+        expect(open).toHaveBeenCalledWith('tel:+441234567890', '_blank', 'noopener,noreferrer');
+        open.mockRestore();
     });
 });

@@ -11,7 +11,7 @@ export interface TabBarCallbacks {
     readonly onClose: (id: string) => void;
     readonly onContextMenu?: (event: MouseEvent, id: string) => void;
     readonly onPromote?: (id: string) => void;
-    // Shows the "+" button after the last tab; the click places the kind menu.
+    // Shows the "+" button after the last tab; the click places its menu of new tabs: the compares, then Paste from clipboard.
     readonly onNewCompare?: (event: MouseEvent) => void;
 }
 
@@ -36,7 +36,7 @@ export function renderTabBar(
             class: 'tab-new',
             text: '+',
             dataset: { action: 'new-compare' },
-            attrs: { type: 'button', title: 'New compare', 'aria-label': 'New compare' },
+            attrs: { type: 'button', title: 'New tab', 'aria-label': 'New tab' },
             on: { click: (event) => onNewCompare(event as MouseEvent) },
         }));
     }
@@ -65,6 +65,10 @@ function tooltipOf(tab: OpenFile, name: string): string {
         return tab.path;
     }
 
+    if (tab.external.pasted === true) {
+        return `${name}, pasted from the clipboard. Save asks where to save it.`;
+    }
+
     return tab.external.handle == null
         ? `${name}, outside the workspace. Save asks where to save it.`
         : `${name}, outside the workspace. Save writes back to this file.`;
@@ -79,7 +83,9 @@ function renderTab(tab: OpenTab, activeId: string | null, callbacks: TabBarCallb
         dataset['active'] = 'true';
     }
 
-    const isExternal = !isDiffTab(tab) && tab.external != null;
+    // A paste belongs to no folder either, but it never had a file outside the workspace, so it carries no arrow.
+    const isPasted = !isDiffTab(tab) && tab.external?.pasted === true;
+    const isExternal = !isDiffTab(tab) && tab.external != null && !isPasted;
 
     if (isDiffTab(tab)) {
         dataset['kind'] = 'diff';
@@ -95,6 +101,10 @@ function renderTab(tab: OpenTab, activeId: string | null, callbacks: TabBarCallb
 
         if (isExternal) {
             dataset['external'] = 'true';
+        }
+
+        if (isPasted) {
+            dataset['pasted'] = 'true';
         }
     }
 

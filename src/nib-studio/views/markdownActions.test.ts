@@ -3,9 +3,17 @@ import { asRoot, FakeDirectoryHandle } from '../../common/fs/testing/fakeFileSys
 import { externalTabPath, type OpenFile } from '../app/store.js';
 import { openFileFixture } from '../testing/testHelpers.js';
 
-const { downloadHtml, printToPdfAsync } = vi.hoisted(() => ({
+const { downloadHtml, printToPdfAsync, renderMermaidImageAsync } = vi.hoisted(() => ({
     downloadHtml: vi.fn(),
     printToPdfAsync: vi.fn(async (_options: { title: string; bodyHtml: string }) => {}),
+    // The copy path's diagram drawing: a flowchart draws as a PNG, anything else fails as Mermaid fails.
+    renderMermaidImageAsync: vi.fn(async (source: string) => {
+        if (!source.startsWith('graph')) {
+            throw new Error(`No diagram type detected matching given configuration for text: ${source.trim()}`);
+        }
+
+        return { url: 'data:image/png;base64,RElBR1JBTQ==', width: 120, height: 80 };
+    }),
 }));
 
 vi.mock('../../common/export/htmlExport.js', async (importOriginal) => ({
@@ -15,10 +23,19 @@ vi.mock('../../common/export/htmlExport.js', async (importOriginal) => ({
 
 vi.mock('../../common/export/pdfExport.js', () => ({ printToPdfAsync }));
 
+vi.mock('./diagramImage.js', () => ({ renderMermaidImageAsync }));
+
 const { EXPORT_IMAGE_LIMIT_BYTES, exportMarkdownToHtmlAsync, exportMarkdownToPdfAsync } = await import('./markdownActions.js');
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgo=';
+const DIAGRAMS = '# Flow\n\n```mermaid\ngraph TD; A-->B\n```\n\n```mermaid\nnot a diagram\n```';
+const DRAWN_DIAGRAM = '<div class="md-mermaid"><img src="data:image/png;base64,RElBR1JBTQ==" alt="Mermaid diagram" width="120" height="80"></div>';
+const FAILED_DIAGRAM = '<div class="md-mermaid-error">No diagram type detected matching given configuration for text: not a diagram</div>';
+const CODE = '# Steps\n\n```js\nrun();\n```';
+const CODE_BLOCK = '<pre class="md-code language-js"><code>run();\n</code></pre>';
+// What the preview adds around a code block for its Copy button, which does nothing in a page that leaves the studio.
+const PREVIEW_CONTROLS = /<button|md-code-copy|md-code-wrap|data-code/;
 
 function openFile(text: string, path = 'notes/readme.md'): OpenFile {
     return openFileFixture(path, text, { view: 'preview' });
@@ -40,6 +57,7 @@ describe('markdownActions', () => {
     beforeEach(() => {
         downloadHtml.mockClear();
         printToPdfAsync.mockClear();
+        renderMermaidImageAsync.mockClear();
     });
 
     afterEach(() => {
@@ -114,6 +132,31 @@ describe('markdownActions', () => {
 
             expect(downloadedHtml()).toContain('Image not shown (file outside the workspace): chart.png');
         });
+
+        it('draws each Mermaid diagram as the picture Copy formatted draws, so the page shows it offline', async () => {
+            await exportMarkdownToHtmlAsync(openFile(DIAGRAMS), null);
+
+            const html = downloadedHtml();
+            expect(renderMermaidImageAsync.mock.calls.map(([source]) => source)).toEqual(['graph TD; A-->B\n', 'not a diagram\n']);
+            expect(html).toContain(DRAWN_DIAGRAM);
+            expect(html).not.toMatch(/<div class="md-mermaid"[^>]*><\/div>/);
+            expect(html).not.toContain('data-mermaid-id');
+            expect(html).not.toContain('<script');
+        });
+
+        it('shows the preview\'s error text in place of a diagram that can\'t be drawn', async () => {
+            await exportMarkdownToHtmlAsync(openFile(DIAGRAMS), null);
+
+            expect(downloadedHtml()).toContain(FAILED_DIAGRAM);
+        });
+
+        it('keeps code blocks without the preview\'s Copy buttons', async () => {
+            await exportMarkdownToHtmlAsync(openFile(CODE), null);
+
+            const html = downloadedHtml();
+            expect(html).toContain(CODE_BLOCK);
+            expect(html).not.toMatch(PREVIEW_CONTROLS);
+        });
     });
 
     describe('exportMarkdownToPdfAsync', () => {
@@ -132,6 +175,23 @@ describe('markdownActions', () => {
             const options = printToPdfAsync.mock.calls[0]?.[0] as { bodyHtml: string };
             expect(options.bodyHtml).toContain('Remote image not loaded (offline): https://example.com/logo.png');
             expect(options.bodyHtml).toContain(`<img alt="Chart" src="${PNG_DATA_URL}">`);
+        });
+
+        it('prints each Mermaid diagram as a picture, or the preview\'s error text when it can\'t be drawn', async () => {
+            await exportMarkdownToPdfAsync(openFile(DIAGRAMS), null);
+
+            const options = printToPdfAsync.mock.calls[0]?.[0] as { bodyHtml: string };
+            expect(options.bodyHtml).toContain(DRAWN_DIAGRAM);
+            expect(options.bodyHtml).toContain(FAILED_DIAGRAM);
+            expect(options.bodyHtml).not.toMatch(/<div class="md-mermaid"[^>]*><\/div>/);
+        });
+
+        it('prints code blocks without the preview\'s Copy buttons', async () => {
+            await exportMarkdownToPdfAsync(openFile(CODE), null);
+
+            const options = printToPdfAsync.mock.calls[0]?.[0] as { bodyHtml: string };
+            expect(options.bodyHtml).toContain(CODE_BLOCK);
+            expect(options.bodyHtml).not.toMatch(PREVIEW_CONTROLS);
         });
     });
 });

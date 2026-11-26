@@ -1,4 +1,5 @@
 import { createLookupQuery, type LookupQuery } from './lookupQuery.js';
+import type { TextSection } from './lookupText.js';
 
 // Matches a query against file names and contents. The rules are tried in order and the first that matches a file
 // wins; a higher tier ranks higher, then an earlier match, then a shorter name.
@@ -23,6 +24,8 @@ export interface LookupCandidate {
     readonly folder: string;
     readonly text: string | null;
     readonly lineStarts: Int32Array | null;
+    // The sheets of a workbook, by the line each starts on; null or absent for any other file.
+    readonly sections?: ReadonlyArray<TextSection> | null;
 }
 
 export interface LookupMatch {

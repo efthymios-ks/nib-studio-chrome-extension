@@ -1,8 +1,11 @@
 # YAML
 
 `.yaml` and `.yml` files open with four view tabs: **Editor**, **Tree**, **JSONPath** and **Schema**,
-and a **Compare with…** button in the toolbar.  
+and **Copy raw**, **Copy formatted** and **Compare with…** buttons in the toolbar.  
 Every view reads the editor's current text, unsaved edits included.  
+In every view, **Copy raw** copies that text as it is, and **Copy formatted** copies the document as [Format](#format) lays it out;
+invalid YAML copies nothing from **Copy formatted**, and the toast says why.
+See [Copy](Editor.md#copy).  
 Parsing uses the `yaml` package, as YAML 1.2,
 or as YAML 1.1 for a document that starts with `%YAML 1.1`.  
 Every view but **Editor** reads the YAML as JSON data, by the [conversion rules](#conversion-rules),

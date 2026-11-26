@@ -231,7 +231,13 @@ export function createLookupBox(callbacks: LookupBoxCallbacks): LookupBox {
             return;
         }
 
-        if (snippet.line != null) {
+        if (snippet.sheet != null) {
+            preview.append(h('div', {
+                class: 'lookup-preview-line',
+                text: `${snippet.sheet.name} · row ${snippet.sheet.row.toLocaleString('en-US')}`,
+            }));
+        }
+        else if (snippet.line != null) {
             preview.append(h('div', { class: 'lookup-preview-line', text: `Line ${snippet.line.toLocaleString('en-US')}` }));
         }
 

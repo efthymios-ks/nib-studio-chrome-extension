@@ -15,14 +15,8 @@ export async function printToPdfAsync(options: PdfExportOptions): Promise<void> 
     });
 
     const frame = document.createElement('iframe');
+    frame.className = 'print-frame';
     frame.setAttribute('aria-hidden', 'true');
-    frame.style.position = 'fixed';
-    frame.style.right = '0';
-    frame.style.bottom = '0';
-    frame.style.width = '0';
-    frame.style.height = '0';
-    frame.style.border = '0';
-
     document.body.append(frame);
 
     try {

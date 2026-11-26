@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import { encodeBase64 } from '../encoding/base64.js';
 import { escapeHtml } from '../html/escapeHtml.js';
+import { headingSlug } from './headingSlug.js';
 import { HEADING_ID_ATTRIBUTE, sanitizeMarkdownHtml } from './sanitizeMarkdownHtml.js';
 
 const MERMAID_FENCE = 'mermaid';
@@ -18,11 +19,14 @@ export interface MermaidBlock {
 export interface MarkdownRenderOptions {
     // 'block' (default) swaps images that would load from outside the extension for a placeholder.
     readonly remoteImages?: 'block' | 'keep';
+    // True gives each code block a Copy button, for the preview, which handles its clicks;
+    // pages and copies that leave the studio have none, since it does nothing there.
+    readonly hasCopyButtons?: boolean;
 }
 
 export function renderMarkdown(source: string, options: MarkdownRenderOptions = {}): MarkdownPreview {
     const diagrams: MermaidBlock[] = [];
-    // Raw HTML passes through to the sanitizer,
+    // Raw HTML passes through to the sanitiser,
     // which keeps what a README needs and drops anything that could run.
     const parser = new MarkdownIt({
         html: true,
@@ -74,9 +78,14 @@ export function renderMarkdown(source: string, options: MarkdownRenderOptions = 
         }
 
         const language = info === '' ? '' : ` language-${escapeHtml(info)}`;
+        const pre = `<pre class="md-code${language}"><code>${escapeHtml(token.content)}</code></pre>`;
+
+        if (options.hasCopyButtons !== true) {
+            return pre;
+        }
+
         // The fence's content ends with the line break before the closing fence, which isn't part of the code.
         const encodedSource = encodeBase64(token.content.replace(/\r?\n$/, ''));
-        const pre = `<pre class="md-code${language}"><code>${escapeHtml(token.content)}</code></pre>`;
         const button = `<button class="md-code-copy" type="button" data-code="${encodedSource}" aria-label="Copy code" title="Copy code"><span aria-hidden="true">⎘</span></button>`;
 
         return `<div class="md-code-wrap">${pre}${button}</div>`;
@@ -88,15 +97,4 @@ export function renderMarkdown(source: string, options: MarkdownRenderOptions = 
         html,
         diagrams,
     };
-}
-
-// A heading's id: lower case, spaces as hyphens, and only letters, digits and hyphens kept, in any script.
-export function headingSlug(value: string): string {
-    return value
-        .toLowerCase()
-        .trim()
-        .replace(/[^\p{L}\p{N}\s-]/gu, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
 }

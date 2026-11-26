@@ -2,7 +2,7 @@
 // @vitest-environment-options {"settings":{"handleDisabledFileLoadingAsSuccess":true}}
 
 import { describe, expect, it } from 'vitest';
-import { headingSlug, renderMarkdown } from './preview.js';
+import { renderMarkdown } from './preview.js';
 
 describe('renderMarkdown', () => {
     it('renders basic markdown to HTML', () => {
@@ -33,8 +33,15 @@ describe('renderMarkdown', () => {
         expect(result.html).toContain('plain');
     });
 
-    it('wraps fenced code blocks with a copy button and base64 data-code', () => {
-        const result = renderMarkdown('```ts\nconst x = 1;\n```\n');
+    it('renders fenced code blocks without a copy button unless asked, for pages and copies that leave the studio', () => {
+        const result = renderMarkdown('```ts\nconst x = 1;\n```\n', { remoteImages: 'keep' });
+
+        expect(result.html).toBe('<pre class="md-code language-ts"><code>const x = 1;\n</code></pre>');
+        expect(result.html).not.toMatch(/<button|md-code-copy|md-code-wrap|data-code/);
+    });
+
+    it('wraps fenced code blocks with a copy button and base64 data-code when asked, for the preview', () => {
+        const result = renderMarkdown('```ts\nconst x = 1;\n```\n', { hasCopyButtons: true });
         expect(result.html).toContain('<div class="md-code-wrap">');
         expect(result.html).toContain('class="md-code-copy"');
         const match = result.html.match(/data-code="([^"]+)"/);
@@ -48,7 +55,7 @@ describe('renderMarkdown', () => {
 
     it('gives the copy button the code exactly, without the line break that ends the block', () => {
         const decode = (markdown: string): string => {
-            const encoded = renderMarkdown(markdown).html.match(/data-code="([^"]+)"/)?.[1] ?? '';
+            const encoded = renderMarkdown(markdown, { hasCopyButtons: true }).html.match(/data-code="([^"]+)"/)?.[1] ?? '';
 
             return new TextDecoder().decode(Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)));
         };
@@ -59,7 +66,7 @@ describe('renderMarkdown', () => {
     });
 
     it('does not wrap mermaid fences in the copy button container', () => {
-        const result = renderMarkdown('```mermaid\nflowchart LR\n  A --> B\n```\n');
+        const result = renderMarkdown('```mermaid\nflowchart LR\n  A --> B\n```\n', { hasCopyButtons: true });
         expect(result.html).not.toContain('md-code-wrap');
         expect(result.html).toContain('md-mermaid');
     });
@@ -187,17 +194,5 @@ describe('renderMarkdown', () => {
         it('hides HTML comments', () => {
             expect(renderMarkdown('a <!-- hidden --> b').html).not.toContain('hidden');
         });
-    });
-});
-
-describe('headingSlug', () => {
-    it('makes ids as the preview does', () => {
-        expect(headingSlug('Release notes')).toBe('release-notes');
-        expect(headingSlug('  Café & Co.  ')).toBe('café-co');
-    });
-
-    it('keeps letters and digits of any script, so a Greek heading gets an id', () => {
-        expect(headingSlug('Σύμβαση 2026')).toBe('σύμβαση-2026');
-        expect(headingSlug('Обзор: часть 1')).toBe('обзор-часть-1');
     });
 });

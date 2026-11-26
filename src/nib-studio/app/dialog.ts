@@ -379,7 +379,7 @@ function onKeyDown(event: KeyboardEvent, context: DialogContext): void {
             return;
         }
 
-        // Buttons inside custom body content keep their own Enter behavior.
+        // Buttons inside custom body content keep their own Enter behaviour.
         if (tag === 'BUTTON' && context.request.bodyNode?.contains(active ?? null) === true) {
             return;
         }

@@ -173,7 +173,7 @@ describe('attachCodeCopyHandler', () => {
         const writeText = vi.fn(async () => undefined);
         Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
         const container = document.createElement('div');
-        container.innerHTML = renderMarkdown('```ts\nconst answer = 42;\n```\n').html;
+        container.innerHTML = renderMarkdown('```ts\nconst answer = 42;\n```\n', { hasCopyButtons: true }).html;
         document.body.append(container);
         attachCodeCopyHandler(container);
 

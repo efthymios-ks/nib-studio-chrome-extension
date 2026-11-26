@@ -55,6 +55,7 @@ describe('on-the-fly compares', () => {
             'Compare XML',
             'Compare Markdown',
             'Compare tables (CSV/TSV)',
+            'Paste from clipboard',
         ]);
 
         items[1]!.click();

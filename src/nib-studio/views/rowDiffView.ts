@@ -1,10 +1,10 @@
 import { formatMegabytes, isLargeTableFile, LARGE_TABLE_FILE_BYTES } from '../../common/csv/csvLimits.js';
 import { parseCsvStreamAsync } from '../../common/csv/csvParser.js';
-import type { DiffCell, DiffChange, DiffColumn, DiffRow, RowsDiffDocument } from '../../common/diff/diffDocument.js';
+import type { DiffCell, DiffChange, DiffColumn, DiffDocumentSide, DiffRow, RowsDiffDocument } from '../../common/diff/diffDocument.js';
 import { buildRowsDiffDocument } from '../../common/diff/rowDiffDocument.js';
 import { basename, extension } from '../../common/fs/fileEntry.js';
 import { resolveFileType } from '../../common/fs/fileTypes.js';
-import { loadWorkbookAsync } from '../../common/office/xlsxLoader.js';
+import { loadWorkbookAsync, type Workbook } from '../../common/office/xlsxLoader.js';
 import { clear, h } from '../app/dom.js';
 import type { DiffSide } from '../app/store.js';
 import { toast } from '../app/toast.js';
@@ -17,6 +17,7 @@ import { buildDiffToolbarSides } from './diffToolbar.js';
 import type { DiffViewInput, LoadedRowSet, RowDiffViewState } from './diffViewState.js';
 import { emptyState } from './emptyState.js';
 import { buildSortKeysToggle } from './jsonDiffView.js';
+import { activeSheetOf } from './tableViewer.js';
 
 export type RowDiffViewInput = DiffViewInput<RowDiffViewState>;
 
@@ -26,6 +27,9 @@ export interface RowDiffPickResult {
     readonly path: string;
     readonly file: File | null;
     readonly text: string | null;
+    // For a workbook: the sheets to compare, the first one it has winning, ignoring case;
+    // else its first visible sheet.
+    readonly sheets?: ReadonlyArray<string>;
 }
 
 const renderTokens = new WeakMap<HTMLElement, object>();
@@ -42,7 +46,7 @@ async function loadRowSetAsync(pick: RowDiffPickResult): Promise<LoadedRowSet | 
 
         const text = pick.text ?? (pick.file != null ? await pick.file.text() : '');
         const parsed = await parseCsvStreamAsync(text, { hasHeader: true });
-        const header = parsed.header ?? parsed.rows[0]?.map((_, index) => `column-${index + 1}`) ?? [];
+        const header = parsed.header ?? parsed.rows[0]?.map((_, index) => `Column ${index + 1}`) ?? [];
 
         return {
             path: pick.path,
@@ -61,7 +65,7 @@ async function loadRowSetAsync(pick: RowDiffPickResult): Promise<LoadedRowSet | 
         }
 
         const workbook = await loadWorkbookAsync(pick.file);
-        const sheet = workbook.sheets[0];
+        const sheet = pickSheet(workbook, pick.sheets ?? []);
 
         if (sheet == null) {
             toast('Workbook has no sheets.', 'fail');
@@ -78,12 +82,27 @@ async function loadRowSetAsync(pick: RowDiffPickResult): Promise<LoadedRowSet | 
                 columns,
                 rows: rest.map((row) => row.slice()),
             },
+            sheets: workbook.sheets.map((entry) => ({ name: entry.name, hidden: entry.hidden })),
+            sheet: sheet.name,
         };
     }
 
-    toast(`Row compare is for CSV/TSV/XLSX files only (${pick.path}).`, 'warn');
+    toast(`Row compare takes CSV, TSV and workbook files only (${pick.path}).`, 'warn');
 
     return null;
+}
+
+// The first of the wanted sheets the workbook has, ignoring case; else its first visible sheet, else its first.
+function pickSheet(workbook: Workbook, wanted: ReadonlyArray<string>): Workbook['sheets'][number] | null {
+    for (const name of wanted) {
+        const match = workbook.sheets.find((sheet) => sheet.name.toLowerCase() === name.toLowerCase());
+
+        if (match != null) {
+            return match;
+        }
+    }
+
+    return workbook.sheets.find((sheet) => !sheet.hidden) ?? workbook.sheets[0] ?? null;
 }
 
 // A side too large to load whole: workspace and disk CSVs over the row diff limit.
@@ -148,9 +167,22 @@ function sourceOf(side: DiffSide): string | File {
     return side.file ?? side.text ?? '';
 }
 
-// Parses each side once per source and suggests key columns until the user picks them.
+// The sheets a side of a workbook compare asks for, best first: the one picked for it; on the modified side,
+// the one of the same name as the original's; then the one its table tab shows.
+function wantedSheets(input: RowDiffDocumentSource, which: DiffSideName): string[] {
+    const { state } = input;
+    const side = which === 'original' ? input.original : input.modified;
+    const sameAsOriginal = which === 'modified' ? loadedOf(state, 'original')?.sheet ?? null : null;
+    const shown = side?.path == null ? null : activeSheetOf(side.path);
+
+    return [state.sheets[which], sameAsOriginal, shown].filter((name): name is string => name != null);
+}
+
+// Parses each side once per source and sheet, and suggests key columns until the user picks them,
+// or again when another sheet lacks the ones picked.
 async function ensureLoadedAsync(input: RowDiffDocumentSource): Promise<void> {
     const { state } = input;
+    let sheetChanged = false;
 
     for (const which of ['original', 'modified'] as const) {
         const side = which === 'original' ? input.original : input.modified;
@@ -161,20 +193,32 @@ async function ensureLoadedAsync(input: RowDiffDocumentSource): Promise<void> {
         }
 
         const source = sourceOf(side);
-
-        if (state.loaded[which]?.source === source) {
-            continue;
-        }
-
         const path = side.source === 'clipboard' || side.source === 'paste' || side.path == null
             ? `${side.label}.${(side.text ?? '').includes('\t') ? 'tsv' : 'csv'}`
             : side.path;
+        // Only a workbook has sheets to ask for, so a CSV or TSV side is read once, whatever the other side shows.
+        const sheets = isSpreadsheetPath(path) ? wantedSheets(input, which) : [];
+        const request = sheets.join('\n');
+        const previous = state.loaded[which];
+
+        if (previous?.source === source && previous.request === request) {
+            continue;
+        }
+
         const rowSet = await loadRowSetAsync({
             path,
             file: side.file ?? null,
             text: side.file != null && isSpreadsheetPath(path) ? null : side.text ?? null,
+            sheets,
         });
-        state.loaded[which] = { source, rowSet };
+        sheetChanged ||= previous?.source === source && previous.rowSet?.sheet !== rowSet?.sheet;
+        state.loaded[which] = { source, request, rowSet };
+    }
+
+    const shared = sharedColumnsOf(loadedOf(state, 'original'), loadedOf(state, 'modified'));
+
+    if (sheetChanged && state.keysChosen && !state.keyColumns.every((column) => shared.includes(column))) {
+        state.keysChosen = false;
     }
 
     if (!state.keysChosen) {
@@ -203,10 +247,58 @@ function buildToolbar(host: HTMLElement, input: RowDiffViewInput): HTMLElement {
         class: 'editor-toolbar',
         children: [
             ...buildDiffToolbarSides(input),
+            buildSheetPickers(host, input),
             buildKeyColumnPicker(host, input),
             buildSortKeysToggle(state, () => renderRowDiffView(host, input), 'Sort columns'),
         ],
     });
+}
+
+// A Sheet picker for each side that is a workbook of more than one sheet; nothing when neither is.
+function buildSheetPickers(host: HTMLElement, input: RowDiffViewInput): HTMLElement | null {
+    const { state } = input;
+    const pickers = (['original', 'modified'] as const).flatMap((which) => {
+        const loaded = loadedOf(state, which);
+
+        if (loaded?.sheets == null || loaded.sheets.length < 2) {
+            return [];
+        }
+
+        const label = which === 'original' ? 'Original sheet' : 'Modified sheet';
+        const select = h('select', {
+            class: 'input row-diff-sheet-select',
+            dataset: { side: which },
+            attrs: { 'aria-label': label, title: `The sheet of ${loaded.path} to compare` },
+            children: loaded.sheets.map((sheet) => h('option', {
+                text: sheet.hidden ? `${sheet.name} (hidden)` : sheet.name,
+                attrs: { value: sheet.name },
+            })),
+        });
+        select.value = loaded.sheet ?? '';
+        select.addEventListener('change', () => pickSheetFor(host, input, which, select.value));
+
+        return [h('label', {
+            class: 'row-diff-sheet',
+            children: [h('span', { text: label }), select],
+        })];
+    });
+
+    return pickers.length === 0 ? null : h('div', { class: 'toolbar-group row-diff-sheets', children: pickers });
+}
+
+// Compares another sheet. Picking the original's sheet moves the modified side to the sheet of the same name,
+// when it has one.
+function pickSheetFor(host: HTMLElement, input: RowDiffViewInput, which: DiffSideName, name: string): void {
+    const { state } = input;
+    state.sheets[which] = name;
+    const wanted = name.toLowerCase();
+    const modifiedHasIt = loadedOf(state, 'modified')?.sheets?.some((sheet) => sheet.name.toLowerCase() === wanted) === true;
+
+    if (which === 'original' && modifiedHasIt) {
+        delete state.sheets.modified;
+    }
+
+    recompute(host, input);
 }
 
 function buildKeyColumnPicker(host: HTMLElement, input: RowDiffViewInput): HTMLElement {
@@ -278,8 +370,8 @@ function currentRowsDiffDocument(input: RowDiffDocumentSource): RowsDiffDocument
     }
 
     const document = buildRowsDiffDocument({
-        original: diffDocumentSide(input.original),
-        modified: diffDocumentSide(input.modified),
+        original: withSheet(diffDocumentSide(input.original), original),
+        modified: withSheet(diffDocumentSide(input.modified), modified),
         left: original.rowSet,
         right: modified.rowSet,
         keyColumns: state.keyColumns,
@@ -300,6 +392,11 @@ function currentRowsDiffDocument(input: RowDiffDocumentSource): RowsDiffDocument
     return document;
 }
 
+// A side of the diff document names the sheet compared, for a workbook.
+function withSheet(side: DiffDocumentSide, loaded: LoadedRowSet): DiffDocumentSide {
+    return loaded.sheet == null ? side : { ...side, sheet: loaded.sheet };
+}
+
 // The aligned table and its bar, or what stands in while a side is missing or the files can't be compared.
 function renderBody(container: HTMLElement, host: HTMLElement, input: RowDiffViewInput): void {
     const { state, callbacks } = input;
@@ -313,7 +410,7 @@ function renderBody(container: HTMLElement, host: HTMLElement, input: RowDiffVie
             children: [buildDiffSideHeader('original', input.original), buildDiffSideHeader('modified', input.modified)],
         }));
         container.append(callbacks.targetDropZone?.((target) => callbacks.onSetSide(empty, target)) ?? emptyState({
-            title: 'Pick two CSV / TSV / XLSX files',
+            title: 'Pick two CSV, TSV or workbook files',
             message: 'Use the toolbar to pick an original and a modified file. The compare runs as soon as both are in.',
         }));
 
@@ -323,7 +420,7 @@ function renderBody(container: HTMLElement, host: HTMLElement, input: RowDiffVie
     if (loadedOf(state, 'original') == null || loadedOf(state, 'modified') == null) {
         container.append(emptyState({
             title: 'Could not read the files as rows',
-            message: 'Row compare takes CSV, TSV and XLSX files.',
+            message: 'Row compare takes CSV, TSV and workbook files.',
         }));
 
         return;

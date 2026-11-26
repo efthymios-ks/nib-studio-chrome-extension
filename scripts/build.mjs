@@ -63,6 +63,10 @@ const STATIC_ASSETS = [
         from: join(ROOT_DIRECTORY, 'src', 'nib-studio', 'index.html'),
         to: join(OUTPUT_DIRECTORY, 'nib-studio', 'index.html'),
     },
+    {
+        from: join(ROOT_DIRECTORY, 'src', 'nib-studio', 'sandbox.html'),
+        to: join(OUTPUT_DIRECTORY, 'nib-studio', 'sandbox.html'),
+    },
     ...PDFJS_ASSETS,
 ];
 
@@ -92,7 +96,9 @@ const BUILD_OPTIONS = {
     logLevel: 'info',
 };
 
-const WORKER_BUILD_OPTIONS = {
+// Classic scripts: the image decoding and Lookup workers, and the sandbox page's script,
+// which a page with an opaque origin loads without CORS.
+const CLASSIC_BUILD_OPTIONS = {
     entryPoints: [
         {
             in: join(ROOT_DIRECTORY, 'src', 'nib-studio', 'imageDecodeWorker.ts'),
@@ -101,6 +107,10 @@ const WORKER_BUILD_OPTIONS = {
         {
             in: join(ROOT_DIRECTORY, 'src', 'nib-studio', 'lookupWorker.ts'),
             out: 'nib-studio/lookupWorker',
+        },
+        {
+            in: join(ROOT_DIRECTORY, 'src', 'nib-studio', 'sandbox.ts'),
+            out: 'nib-studio/sandbox',
         },
     ],
     outdir: OUTPUT_DIRECTORY,
@@ -115,7 +125,7 @@ const WORKER_BUILD_OPTIONS = {
 async function readMetafilesAsync() {
     const metafiles = [];
 
-    for (const options of [BUILD_OPTIONS, WORKER_BUILD_OPTIONS]) {
+    for (const options of [BUILD_OPTIONS, CLASSIC_BUILD_OPTIONS]) {
         const result = await esbuild.build({
             ...options,
             absWorkingDir: ROOT_DIRECTORY,
@@ -204,7 +214,7 @@ await copyStaticAssetsAsync();
 await compileScssAsync();
 
 if (IS_WATCH_MODE) {
-    for (const options of [BUILD_OPTIONS, WORKER_BUILD_OPTIONS]) {
+    for (const options of [BUILD_OPTIONS, CLASSIC_BUILD_OPTIONS]) {
         const context = await esbuild.context(options);
         await context.watch();
     }
@@ -214,5 +224,5 @@ if (IS_WATCH_MODE) {
 }
 else {
     await esbuild.build(BUILD_OPTIONS);
-    await esbuild.build(WORKER_BUILD_OPTIONS);
+    await esbuild.build(CLASSIC_BUILD_OPTIONS);
 }

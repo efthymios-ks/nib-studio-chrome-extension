@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakeDirectoryHandle } from '../../common/fs/testing/fakeFileSystem.js';
+import { FakeDirectoryHandle, FakeFileHandle } from '../../common/fs/testing/fakeFileSystem.js';
 import { createAppHarness, openHarnessWorkspaceAsync, tabElement, type AppHarness } from '../testing/appHarness.js';
-import { settleAsync } from '../testing/testHelpers.js';
+import { stubClipboard, type FakeClipboard } from '../testing/fakeClipboard.js';
+import { settleAsync, toastTexts } from '../testing/testHelpers.js';
+import { DISK_COPY_LIMIT_BYTES } from '../views/fileCopy.js';
 import { EMPTY_SELECTION } from '../explorer/selection.js';
 import type { CommandContext } from './commands.js';
 import type { DroppedFile } from './droppedItems.js';
@@ -157,6 +159,19 @@ describe('The tab menu of a file from outside the workspace', () => {
         expect(copied).toEqual(['from outside\n']);
     });
 
+    it('copies the tab\'s text as it is now, unsaved edits included', async () => {
+        harness = createHarness();
+        await openHarnessWorkspaceAsync(harness);
+        await harness.callAsync('openFileAsync', 'README.md', { preview: false });
+        await harness.callAsync('markChange', 'README.md', '# Read me, edited\n');
+
+        openTabMenu('README.md');
+        menuItem('Copy content to clipboard')!.click();
+        await settleAsync();
+
+        expect(copied).toEqual(['# Read me, edited\n']);
+    });
+
     it('copies the file\'s content while no workspace is open', async () => {
         harness = createHarness();
         const outside = await openOutsideFileAsync();
@@ -206,5 +221,56 @@ describe('The menu of the empty area under the tree', () => {
         await harness.callAsync('showTreeContextMenu', event, null);
 
         expect(menuLabels()).toEqual(['New file', 'New folder', 'Refresh']);
+    });
+});
+
+describe('Copy content to clipboard of a file read from disk', () => {
+    let clipboard: FakeClipboard;
+
+    beforeEach(() => {
+        clipboard = stubClipboard();
+    });
+
+    afterEach(() => {
+        clipboard.restore();
+        document.querySelectorAll('.toast').forEach((toast) => toast.remove());
+    });
+
+    it('copies a file that is not open as saved on disk', async () => {
+        harness = createHarness();
+        await openHarnessWorkspaceAsync(harness);
+
+        await harness.callAsync('copyContentAsync', NESTED);
+        await settleAsync();
+
+        expect(clipboard.last().get('text/plain')).toBe('# Set up\n');
+        expect(toastTexts()).toContain('setup.md copied.');
+    });
+
+    it('says so when the file is no longer on disk', async () => {
+        harness = createHarness();
+        await openHarnessWorkspaceAsync(harness);
+        const guides = await (await harness.folder.getDirectoryHandle('docs')).getDirectoryHandle('guides');
+        await guides.removeEntry('setup.md');
+
+        await harness.callAsync('copyContentAsync', NESTED);
+        await settleAsync();
+
+        expect(clipboard.writes).toEqual([]);
+        expect(toastTexts()).toContain('Could not copy: the file is no longer on disk.');
+    });
+
+    it('refuses a file larger than a copy reads before reading it, as Copy raw does', async () => {
+        harness = createHarness();
+        await openHarnessWorkspaceAsync(harness);
+        const huge = new File(['x'], 'setup.md');
+        Object.defineProperty(huge, 'size', { value: DISK_COPY_LIMIT_BYTES + 1 });
+        vi.spyOn(FakeFileHandle.prototype, 'getFile').mockResolvedValue(huge);
+
+        await harness.callAsync('copyContentAsync', NESTED);
+        await settleAsync();
+
+        expect(clipboard.write).not.toHaveBeenCalled();
+        expect(toastTexts()).toContain('This file is too large to copy as text: it is 64.0 MB, and a copy takes up to 64.0 MB.');
     });
 });

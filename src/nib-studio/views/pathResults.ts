@@ -7,10 +7,9 @@ import {
     type ValueLine,
     type ValueTokenKind,
 } from '../../common/paths/valueFormat.js';
+import { copyTextWithToastAsync } from '../app/clipboard.js';
 import { clear, h } from '../app/dom.js';
 import { shortcutLetter } from '../app/shortcutKey.js';
-import { toast } from '../app/toast.js';
-import { errorMessage } from '../../common/errorMessage.js';
 import { attachTextBoxHistory, createTextBoxHistory, setTextBoxValue, type TextBoxHistory } from './textBoxHistory.js';
 
 // One match of a query, as the results list shows it.
@@ -340,7 +339,7 @@ export function renderPathResults(pane: HTMLElement, options: PathResultsOptions
 
     copyAllButton.addEventListener('click', () => {
         if (current != null) {
-            void copyTextAsync(current.copyAll(state.layout), `${describeCount(current.matches.length)} copied.`);
+            void copyTextWithToastAsync(current.copyAll(state.layout), `${describeCount(current.matches.length)} copied.`);
         }
     });
 
@@ -423,7 +422,7 @@ export function bindResultCards(list: HTMLElement, actions: ResultCardActions): 
 
             if (text != null) {
                 event.preventDefault();
-                void copyTextAsync(text, 'Value copied.');
+                void copyTextWithToastAsync(text, 'Value copied.');
             }
         }
     });
@@ -441,16 +440,6 @@ function revealButton(): HTMLElement {
             'aria-label': 'Show in tree',
         },
     });
-}
-
-async function copyTextAsync(text: string, confirmation: string): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(text);
-        toast(confirmation, 'ok');
-    }
-    catch (error) {
-        toast(errorMessage(error, 'Copy failed.'), 'fail');
-    }
 }
 
 function renderCard(match: PathResultMatch, index: number, firstIndex: number, layout: ValueLayout): HTMLElement {

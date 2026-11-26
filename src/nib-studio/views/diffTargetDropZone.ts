@@ -1,3 +1,4 @@
+import { readClipboardTextAsync } from '../app/clipboardPaste.js';
 import { h } from '../app/dom.js';
 import { toast } from '../app/toast.js';
 import { INTERNAL_MIME } from '../explorer/dragDrop.js';
@@ -208,24 +209,11 @@ async function pickFileAsync(options: DiffTargetDropZoneOptions): Promise<void> 
 }
 
 async function pasteFromClipboardAsync(options: DiffTargetDropZoneOptions): Promise<void> {
-    let text: string;
+    const text = await readClipboardTextAsync(navigator.clipboard);
 
-    try {
-        text = await navigator.clipboard.readText();
+    if (text != null) {
+        options.onTarget(clipboardTarget(text));
     }
-    catch {
-        toast('Could not read clipboard.', 'fail');
-
-        return;
-    }
-
-    if (text === '') {
-        toast('The clipboard has no text.', 'warn');
-
-        return;
-    }
-
-    options.onTarget(clipboardTarget(text));
 }
 
 async function deliverTreeDropAsync(raw: string, options: DiffTargetDropZoneOptions): Promise<void> {

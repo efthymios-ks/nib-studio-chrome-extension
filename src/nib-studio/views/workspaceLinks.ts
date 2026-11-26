@@ -30,7 +30,7 @@ export interface WorkspaceLinkOptions {
 export const MIDDLE_BUTTON = 1;
 
 // The link a click landed in, or null; a target in a frame's page is checked without `instanceof`.
-export function closestLink(target: EventTarget | null): Element | null {
+function closestLink(target: EventTarget | null): Element | null {
     const element = target as Element | null;
 
     return typeof element?.closest === 'function' ? element.closest(LINK_SELECTOR) : null;
@@ -38,7 +38,7 @@ export function closestLink(target: EventTarget | null): Element | null {
 
 // Opens a web, `mailto:` or `tel:` address in a new browser tab, which can't reach back to the studio.
 // It runs in the studio's own window, so it works for a click in a sandboxed frame too.
-export function openInNewTab(href: string): void {
+function openInNewTab(href: string): void {
     window.open(href, '_blank', 'noopener,noreferrer');
 }
 
@@ -70,7 +70,8 @@ export function linkActionFor(href: string, documentPath: string | null): LinkAc
     return { kind: 'open', target: { path: resolved.path, fragment: resolved.fragment } };
 }
 
-// Handles a click on a link in a preview; a click elsewhere passes.
+// Handles a click on a link in a preview; a click elsewhere passes,
+// and so does an in-page link the studio doesn't take.
 export function handleWorkspaceLinkClick(event: MouseEvent, options: WorkspaceLinkOptions): void {
     const link = closestLink(event.target);
 
@@ -78,25 +79,35 @@ export function handleWorkspaceLinkClick(event: MouseEvent, options: WorkspaceLi
         return;
     }
 
-    const action = linkActionFor(link.getAttribute('href') ?? '', options.documentPath);
+    const href = link.getAttribute('href') ?? '';
+    const action = linkActionFor(href, options.documentPath);
 
+    if (action.kind === 'fragment' && options.onFragment == null) {
+        return;
+    }
+
+    event.preventDefault();
+    takeLinkAction(action, href, options);
+}
+
+// Follows a link of a page the studio can't reach into, such as an HTML preview's sandbox page,
+// as a click on it in a preview does.
+export function followLink(href: string, options: WorkspaceLinkOptions): void {
+    takeLinkAction(linkActionFor(href, options.documentPath), href, options);
+}
+
+function takeLinkAction(action: LinkAction, href: string, options: WorkspaceLinkOptions): void {
     if (action.kind === 'follow') {
-        event.preventDefault();
-        (options.onFollow ?? openInNewTab)(link.getAttribute('href') ?? '');
+        (options.onFollow ?? openInNewTab)(href);
 
         return;
     }
 
     if (action.kind === 'fragment') {
-        if (options.onFragment != null) {
-            event.preventDefault();
-            options.onFragment(action.fragment);
-        }
+        options.onFragment?.(action.fragment);
 
         return;
     }
-
-    event.preventDefault();
 
     if (action.kind === 'refuse') {
         toast(action.message, 'warn');

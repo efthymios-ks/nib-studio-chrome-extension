@@ -5,6 +5,7 @@ import type {
     LinqOrderKey,
     LinqQuery,
     LinqSelectItem,
+    LinqSourceRef,
 } from './linqAst.js';
 import { LinqError, type LinqSpan } from './linqErrors.js';
 import { tokenize, type LinqToken } from './linqTokenizer.js';
@@ -20,6 +21,16 @@ export const LINQ_KEYWORDS: ReadonlyArray<string> = [
 export const LINQ_CONTEXTUAL_KEYWORDS: ReadonlyArray<string> = ['order'];
 
 const KEYWORDS = new Set(LINQ_KEYWORDS);
+
+// Whether a word, in any case, is one of the keywords.
+export function isLinqKeyword(word: string): boolean {
+    return KEYWORDS.has(word.toLowerCase());
+}
+
+// Whether a column or sheet name can be written bare: a plain word that isn't a keyword.
+export function isBareName(name: string): boolean {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !isLinqKeyword(name);
+}
 
 const CLAUSES_AFTER_SELECT = new Set(['where', 'orderby', 'order', 'distinct', 'skip', 'take']);
 
@@ -100,33 +111,16 @@ class LinqParser {
 
         this.advance();
         let rangeVariable: string | null = null;
-        const source = this.peek();
+        const next = this.peek();
 
-        if (this.isPunct(source, '*') || this.isKeyword(source, 'table')) {
+        // `from row in …` names each row; anything else after from is the source itself.
+        if (next.kind === 'identifier' && !this.isReserved(next) && this.isKeyword(this.peekAt(1), 'in')) {
+            rangeVariable = next.text;
+            this.advance();
             this.advance();
         }
-        else if (source.kind === 'identifier' && !this.isReserved(source)) {
-            rangeVariable = source.text;
-            this.advance();
-            const inToken = this.peek();
 
-            if (!this.isKeyword(inToken, 'in')) {
-                throw new LinqError(`Expected 'in table' after 'from ${rangeVariable}'.`, inToken);
-            }
-
-            this.advance();
-            const tableToken = this.peek();
-
-            if (!this.isKeyword(tableToken, 'table')) {
-                throw new LinqError("Queries always read the open table: write 'in table'.", tableToken);
-            }
-
-            this.advance();
-        }
-        else {
-            throw new LinqError("After 'from', write a name and 'in table', like 'from row in table', or write '*'.", source);
-        }
-
+        const source = this.parseSource(rangeVariable);
         const clauses: LinqClause[] = [];
         let selected = false;
         let grouped = false;
@@ -145,7 +139,38 @@ class LinqParser {
             clauses.push(clause);
         }
 
-        return { rangeVariable, clauses, span: { start: first.start, end: this.peek().start } };
+        return { rangeVariable, source, clauses, span: { start: first.start, end: this.peek().start } };
+    }
+
+    // The open table, written `*` or `table`, or a sheet:
+    // `Q2`, `'North Region'`, `[North Region]` or `` `North Region` ``.
+    private parseSource(rangeVariable: string | null): LinqSourceRef {
+        const token = this.peek();
+
+        if ((rangeVariable == null && this.isPunct(token, '*')) || this.isKeyword(token, 'table')) {
+            this.advance();
+
+            return { sheet: null, span: { start: token.start, end: token.end } };
+        }
+
+        const isName = token.kind === 'string'
+            || token.kind === 'number'
+            || (token.kind === 'identifier' && !this.isReserved(token));
+
+        if (isName && token.text.trim() !== '') {
+            this.advance();
+
+            return { sheet: token.text, span: { start: token.start, end: token.end } };
+        }
+
+        if (rangeVariable != null) {
+            throw new LinqError(`After 'from ${rangeVariable} in', write 'table' or a sheet name, like 'in table' or 'in Q2'.`, token);
+        }
+
+        throw new LinqError(
+            "After 'from', write '*', a sheet name or a row name with 'in', like 'from *', 'from Q2' or 'from row in table'.",
+            token,
+        );
     }
 
     private parseClause(token: LinqToken, word: string, grouped: boolean): LinqClause {

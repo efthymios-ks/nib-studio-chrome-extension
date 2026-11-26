@@ -1,7 +1,8 @@
 import mermaid from 'mermaid';
+import { copyTextWithToastAsync } from '../app/clipboard.js';
 import { h } from '../app/dom.js';
-import { toast } from '../app/toast.js';
 import { errorMessage } from '../../common/errorMessage.js';
+import { DIAGRAM_FAILED_MESSAGE } from '../../common/markdown/documentDiagrams.js';
 import { openBlobInNewTab } from './markdownDiffControls.js';
 
 let initialized = false;
@@ -37,7 +38,7 @@ export async function renderMermaidIntoAsync(
         placeholder.append(buildMermaidTools(source, svg));
     }
     catch (error) {
-        const message = errorMessage(error, 'Mermaid render failed.');
+        const message = errorMessage(error, DIAGRAM_FAILED_MESSAGE);
         placeholder.classList.remove('md-mermaid');
         placeholder.classList.add('md-mermaid-error');
         placeholder.textContent = message;
@@ -52,7 +53,7 @@ export function buildMermaidTools(source: string, svg: string): HTMLElement {
         attrs: { type: 'button' },
         on: {
             click: () => {
-                void copyMermaidSourceAsync(source);
+                void copyTextWithToastAsync(source, 'Mermaid source copied.');
             },
         },
     });
@@ -66,14 +67,4 @@ export function buildMermaidTools(source: string, svg: string): HTMLElement {
     });
 
     return h('div', { class: 'md-mermaid-tools', children: [copyButton, enlargeButton] });
-}
-
-async function copyMermaidSourceAsync(source: string): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(source);
-        toast('Mermaid source copied.', 'ok');
-    }
-    catch (error) {
-        toast(errorMessage(error, 'Copy failed.'), 'fail');
-    }
 }

@@ -2,6 +2,12 @@ import { h } from './dom.js';
 
 export type ToastTone = 'info' | 'ok' | 'warn' | 'fail';
 
+// What a toast says, and in which tone.
+export interface ToastMessage {
+    readonly message: string;
+    readonly tone: ToastTone;
+}
+
 const DEFAULT_DURATION_MS = 3600;
 
 let stackElement: HTMLElement | null = null;

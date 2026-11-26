@@ -1,8 +1,11 @@
 # XML
 
 `.xml`, `.xsd`, `.xsl`, `.xslt` and `.config` files open with four view tabs: **Editor**, **Tree**, **XPath** and **As JSON**,
-and a **Compare with…** button in the toolbar.  
+and **Copy raw**, **Copy formatted** and **Compare with…** buttons in the toolbar.  
 Every view reads the editor's current text, unsaved edits included.  
+In every view, **Copy raw** copies that text as it is, and **Copy formatted** copies the document indented;
+invalid XML copies nothing from **Copy formatted**, and the toast says why.
+See [Copy](Editor.md#copy).  
 Parsing uses a parser written for Nib Studio, not the browser's `DOMParser`, so error messages carry a line and column.
 
 ## Editor
@@ -121,7 +124,7 @@ and opens the JSON in a new tab named after the file, such as `orders.xml.conver
 That tab exists only in the studio until you save it, so it opens unsaved, with **Save**;
 **Save** writes it next to the XML file.  
 Converting again replaces that tab's text.  
-Invalid XML shows **Not valid XML** in a toast with the parser message.  
+Invalid XML shows **Not valid XML** in a toast with the parser message, line and column.  
 The command is left out for a file opened from outside the workspace, which has no folder to save next to.
 
 ## Compare with…

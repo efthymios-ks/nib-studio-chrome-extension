@@ -486,7 +486,7 @@ describe('renderPathResults', () => {
             press(card(0), 'c', { ctrlKey: true });
             await flushAsync();
 
-            expect(document.querySelector('.toast[data-tone="fail"]')?.textContent).toBe('Document is not focused.');
+            expect(document.querySelector('.toast[data-tone="fail"]')?.textContent).toBe('Could not copy: Document is not focused.');
         });
 
         it('keeps cards focusable and the ↗ button out of the tab order', () => {

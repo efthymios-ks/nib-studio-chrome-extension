@@ -1,6 +1,6 @@
 # vendor/
 
-Vendored dependencies and license texts.  
+Vendored dependencies and licence texts.  
 Three cases live here.
 
 ## vendor/sheetjs/ (committed)
@@ -17,17 +17,17 @@ See [sheetjs/README.md](sheetjs/README.md) for how to refresh it.
 
 ## vendor/licenses/ (committed)
 
-The About dialog and `THIRD_PARTY_NOTICES.txt` list the license of every package the build ships,
-read from the license file in its `node_modules` folder by `scripts/collect-licenses.mjs`.  
-A package that ships without one has its license text here instead, under its package name;
-the build fails for a shipped package with license text in neither place.  
+The About dialog and `THIRD_PARTY_NOTICES.txt` list the licence of every package the build ships,
+read from the licence file in its `node_modules` folder by `scripts/collect-licenses.mjs`.  
+A package that ships without one has its licence text here instead, under its package name;
+the build fails for a shipped package with licence text in neither place.  
 Two packages need one:
 
-- `@cfworker/json-schema`: its npm package has no license file,
-  so `licenses/@cfworker/json-schema/LICENSE.md` is a copy of the MIT license from its GitHub repository.
-- `brotli`, the WOFF2 decompressor the font preview uses: neither its npm package nor its GitHub repository has a license file.
+- `@cfworker/json-schema`: its npm package has no licence file,
+  so `licenses/@cfworker/json-schema/LICENSE.md` is a copy of the MIT licence from its GitHub repository.
+- `brotli`, the WOFF2 decompressor the font preview uses: neither its npm package nor its GitHub repository has a licence file.
   Its `package.json` says MIT, and its decoder is a port of Google's Apache-2.0 Brotli decoder,
-  so `licenses/brotli/LICENSE` holds the MIT license, the decoder's Apache notice and the Apache License 2.0.
+  so `licenses/brotli/LICENSE` holds the MIT licence, the decoder's Apache notice and the Apache License 2.0.
 
 ## vendor/tarballs/ (gitignored, built on demand)
 

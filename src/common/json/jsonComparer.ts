@@ -12,7 +12,7 @@ export interface JsonArrayRule {
 
 export interface JsonComparerOptions {
     readonly arrayRules?: ReadonlyArray<JsonArrayRule>;
-    // Leaves object keys in document order when normalizing; they are sorted otherwise.
+    // Leaves object keys in document order when normalising; they are sorted otherwise.
     readonly keepKeyOrder?: boolean;
 }
 

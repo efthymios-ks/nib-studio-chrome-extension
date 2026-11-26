@@ -34,7 +34,7 @@ describe('buildCsvRowIndexAsync', () => {
     });
 
     it('measures offsets in bytes for multi-byte text and skips a BOM', async () => {
-        const bytes = encoder.encode('﻿name\nÄnna\nBob\n');
+        const bytes = encoder.encode('\uFEFFname\nÄnna\nBob\n');
         const index = await buildCsvRowIndexAsync(new Blob([bytes]));
 
         expect(starts(index)).toEqual([3, 8, 14]);

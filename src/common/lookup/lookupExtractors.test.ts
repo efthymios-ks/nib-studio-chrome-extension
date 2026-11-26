@@ -8,6 +8,7 @@ import {
     buildTinyXlsx,
     encryptDocFile,
 } from '../office/testing/encryptionFixtures.js';
+import { SALES_SHEETS, buildSheetsWorkbook } from '../office/testing/workbookFixtures.js';
 import { decodeText, extractText, htmlText, markupText, MAX_FILE_BYTES, readPlanFor, type Extraction } from './lookupExtractors.js';
 
 const OPTIONS = { codePage: 1253 };
@@ -46,7 +47,7 @@ describe('readPlanFor', () => {
 
 describe('decodeText', () => {
     it('reads UTF-8, with or without a byte order mark, and UTF-16 by its mark', () => {
-        expect(decodeText(new TextEncoder().encode('﻿καλημέρα'), 1252)).toBe('καλημέρα');
+        expect(decodeText(new TextEncoder().encode('\uFEFFκαλημέρα'), 1252)).toBe('καλημέρα');
         expect(decodeText(Uint8Array.of(0xff, 0xfe, 0xb1, 0x03, 0x62, 0x00), 1252)).toBe('αb');
     });
 
@@ -112,6 +113,29 @@ describe('extractText', () => {
         expect(textOf(extractText('budget.xlsx', buildTinyXlsx(rows), OPTIONS))).toBe('Category Q1 Cloud hosting 4300');
         expect(textOf(extractText('budget.xls', buildTinyWorkbook(rows, 'biff8'), OPTIONS))).toBe('Category Q1 Cloud hosting 4300');
         expect(textOf(extractText('budget.ods', buildTinyWorkbook(rows, 'ods'), OPTIONS))).toBe('Category Q1 Cloud hosting 4300');
+    });
+
+    it('reads every visible sheet, a line per row, and says where each sheet starts and its first row', () => {
+        for (const bookType of ['xlsx', 'biff8', 'xlsb'] as const) {
+            const extraction = extractText('sales.xlsx', buildSheetsWorkbook(SALES_SHEETS, bookType), OPTIONS);
+
+            expect(extraction.kind === 'text' ? extraction.text.split('\n') : [], bookType).toEqual([
+                'order_id city total', 'Q1-1 Patras 120', 'Q1-2 Athens 80', 'Q1-3 Volos 45',
+                'order_id city total', 'Q2-1 Larissa 300', 'Q2-2 Patras 15',
+                'customer city revenue', 'Thessaly Ironworks Larissa 5400', 'Olympus Foods Katerini 2100',
+            ]);
+            expect(extraction.kind === 'text' ? [extraction.keepsLines, extraction.sections] : null, bookType).toEqual([true, [
+                { name: 'Q1', firstLine: 1, firstNumber: 1 },
+                { name: 'Q2', firstLine: 5, firstNumber: 1 },
+                { name: 'North Region', firstLine: 8, firstNumber: 1 },
+            ]]);
+        }
+    });
+
+    it('keeps each row on one line when a cell holds line breaks', () => {
+        const extraction = extractText('notes.xlsx', buildSheetsWorkbook([{ name: 'Notes', rows: [['Note'], ['first line\nsecond line']] }]), OPTIONS);
+
+        expect(extraction.kind === 'text' ? extraction.text.split('\n') : []).toEqual(['Note', 'first line second line']);
     });
 
     it('reads a Word 97–2003 document', () => {

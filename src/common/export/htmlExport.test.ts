@@ -27,18 +27,20 @@ describe('htmlExport', () => {
             expect(html).toContain('<p class="x">A &amp; B</p>');
         });
 
-        it('uses the default accent colour', () => {
+        it('colours links and a quote\'s bar in the accent', () => {
             const html = buildStandaloneHtml({ title: 'Doc', bodyHtml: '' });
 
             expect(html).toContain('a { color: #1f6feb; }');
             expect(html).toContain('border-left: 3px solid #1f6feb;');
         });
 
-        it('uses a custom accent colour', () => {
-            const html = buildStandaloneHtml({ title: 'Doc', bodyHtml: '', accentColor: '#ff0000' });
+        it('sets the diagrams on white paper, and a diagram that can\'t be drawn in the light preview\'s error colours', () => {
+            const html = buildStandaloneHtml({ title: 'Doc', bodyHtml: '' });
 
-            expect(html).toContain('a { color: #ff0000; }');
-            expect(html).not.toContain('#1f6feb');
+            expect(html).toMatch(/\.md-mermaid \{[^}]*text-align: center;[^}]*break-inside: avoid;/);
+            expect(html).toContain('.md-mermaid img { background: #ffffff; }');
+            expect(html).toMatch(/\.md-mermaid-error \{[^}]*white-space: pre-wrap;[^}]*color: #c72e0f;[^}]*background: #fde7e4;[^}]*border: 1px solid #c72e0f;/);
+            expect(html).not.toContain('.md-mermaid svg');
         });
 
         it('parses into a document with the expected title and body', () => {

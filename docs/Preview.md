@@ -4,6 +4,8 @@ Images, audio, video, fonts and archives open as a view-only preview,
 and so do presentations, OpenDocument text and drawings, and files of an unknown type that aren't text.  
 There is no Editor view, no **Save**, no dirty state, no **Compare with…** and no editor bar;
 the file is shown from disk and never read as text.  
+None of these files, nor a PDF, has **Copy raw**, **Copy formatted** or **Copy content**;
+an image has **Copy image** instead.  
 The preview reloads by itself when the file changes on disk,
 and a file dropped from outside the workspace previews the same way.  
 PDFs open in the same frame, with selectable text, a page box, Find, a zoom menu with **Fit page**,
@@ -16,7 +18,7 @@ Every preview shares one frame: a toolbar, the content, and the **Info** panel.
 
 The toolbar holds, from left to right:
 
-- the type badge, **Image**, **Audio**, **Video**, **Font** or **Archive**;
+- the type badge, such as **Image**, **Audio**, **Video**, **Font**, **Archive** or **Binary**;
 - for images and fonts, the zoom controls: `−`, the zoom level, `+` and **Reset**;
 - the viewer's own actions, such as **Copy image**;
 - **Info**, which shows or hides the details panel;
@@ -104,7 +106,7 @@ They come back when the content does.
 - **TIFF:** decoded in a background worker that is part of the extension, so the page stays responsive.
   Switching tabs and coming back does not decode again.
 - **Copy image:** puts the image on the clipboard as PNG, at its full size and upright, whatever its format,
-  and confirms with a toast.
+  and confirms with **Image copied to the clipboard as PNG.**
   `Ctrl+C` does the same while the image has focus and no text is selected.
   An animated image copies its first frame.
 - **Damaged files:** a file that can't be decoded shows **This image can't be shown** with the reason,

@@ -1,6 +1,8 @@
+import type { TableCopy } from '../../common/clipboard/tableClipboard.js';
 import { isAbortError } from '../../common/csv/csvLimits.js';
 import { clear, h } from '../app/dom.js';
 import { errorMessage } from '../../common/errorMessage.js';
+import { registerShownTable } from './shownTable.js';
 import { applyFilters, type TableFilter, type TableFilterOperator } from './tableFilters.js';
 import { cycleSort, sortRows, type TableSort } from './tableSort.js';
 import { computeVirtualWindow, scrollTopForRow } from './virtualWindow.js';
@@ -69,6 +71,8 @@ export interface TableViewOptions {
     readonly largeSource?: TableLargeSource;
     // Extra controls for the right end of the toolbar, such as the Query toggle.
     readonly toolbarExtras?: () => ReadonlyArray<HTMLElement>;
+    // Shown between the rows and the status line, such as the sheet tabs of a workbook.
+    readonly footer?: HTMLElement | null;
     // Kept by the caller per file: the view starts from it and writes back to it, so leaving the tab and returning restores it.
     readonly memory?: TableViewMemory;
 }
@@ -125,7 +129,6 @@ const OVERSCAN_ROWS = 10;
 const FALLBACK_VIEWPORT_HEIGHT = 600;
 const MAX_SCROLL_HEIGHT = 8_000_000;
 const DISTINCT_SAMPLE_ROWS = 2000;
-const COPY_ROW_LIMIT = 100_000;
 
 export function renderTableView(container: HTMLElement, options: TableViewOptions): TableHandle {
     const state: ViewState = {
@@ -156,16 +159,22 @@ export function renderTableView(container: HTMLElement, options: TableViewOption
 
     const root = h('div', { class: 'table-view' });
     const toolbar = h('div', { class: 'table-toolbar' });
-    const body = h('div', { class: 'table-body' });
+    // The rows can take the focus, so keys such as Ctrl+PageDown reach the view around them.
+    const body = h('div', { class: 'table-body', attrs: { tabindex: '0', role: 'region', 'aria-label': 'Rows' } });
     const status = h('div', { class: 'table-status' });
 
     if (largeSource != null) {
         root.dataset['virtual'] = 'true';
     }
 
-    root.append(toolbar, body, status);
+    root.append(toolbar, body, ...(options.footer == null ? [] : [options.footer]), status);
     clear(container);
     container.append(root);
+    registerShownTable(root, {
+        rowCount: () => (largeSource == null ? visibleRows().length : visibleCount()),
+        busyReason: () => copyBusyReason(),
+        readRowsAsync: async (limit) => await readShownRowsAsync(limit),
+    });
 
     // Large-source rendering state: the tbody being windowed, the rows of the window by row number, and the running query.
     // The window keeps its rows itself, since a sorted window can need more blocks than the source's cache holds.
@@ -254,17 +263,6 @@ export function renderTableView(container: HTMLElement, options: TableViewOption
             },
         });
 
-        const copyButton = h('button', {
-            class: 'button',
-            text: 'Copy as TSV',
-            attrs: { type: 'button', title: 'Copy visible rows as TSV' },
-            on: {
-                click: () => {
-                    void copyAsTsvAsync();
-                },
-            },
-        });
-
         const columnsButton = h('button', {
             class: 'button',
             text: 'Columns',
@@ -284,7 +282,6 @@ export function renderTableView(container: HTMLElement, options: TableViewOption
             ...tools,
             h('span', { class: 'table-toolbar-spacer' }),
             columnsButton,
-            copyButton,
             resetButton,
             ...(options.toolbarExtras?.() ?? []),
         );
@@ -335,15 +332,16 @@ export function renderTableView(container: HTMLElement, options: TableViewOption
         renderStatus();
     };
 
-    const copyAsTsvAsync = async (): Promise<void> => {
+    // The first `limit` rows as shown, with the columns shown, in their order: what the file's Copy formatted copies.
+    const readShownRowsAsync = async (limit: number): Promise<TableCopy> => {
         const columns = visibleColumns();
         let rows: ReadonlyArray<ReadonlyArray<unknown>>;
 
         if (largeSource == null) {
-            rows = visibleRows();
+            rows = visibleRows().slice(0, limit);
         }
         else {
-            const count = Math.min(visibleCount(), COPY_ROW_LIMIT);
+            const count = Math.min(visibleCount(), limit);
             const wanted = new Uint32Array(count);
 
             for (let position = 0; position < count; position += 1) {
@@ -351,16 +349,27 @@ export function renderTableView(container: HTMLElement, options: TableViewOption
             }
 
             rows = await largeSource.readRowsAsync(wanted);
-            state.notice = visibleCount() > COPY_ROW_LIMIT ? `Copied the first ${formatNumber(COPY_ROW_LIMIT)} rows.` : null;
-            renderStatus();
         }
 
         const indexes = columns.map((column) => columnIndexById.get(column.id) ?? -1);
-        const text = toTsv(columns, rows.map((row) => indexes.map((index) => (index >= 0 ? row[index] : ''))));
 
-        if (navigator.clipboard != null) {
-            await navigator.clipboard.writeText(text);
+        return {
+            columns: columns.map((column) => column.title),
+            rows: rows.map((row) => indexes.map((index) => (index >= 0 ? row[index] : ''))),
+        };
+    };
+
+    // A large file's rows copy as shown once the file is read through and its sort or filter has finished.
+    const copyBusyReason = (): string | null => {
+        if (largeSource == null) {
+            return null;
         }
+
+        if (largeSource.isIndexing()) {
+            return 'The file is still being read; copy again once it has finished.';
+        }
+
+        return state.queryPhase === 'idle' ? null : 'The rows are still being sorted or filtered; copy again once they have finished.';
     };
 
     const openColumnChooser = (anchor: MouseEvent): void => {
@@ -1380,13 +1389,6 @@ function spacerRow(height: number, span: number): HTMLElement {
         attrs: { style: `height: ${height}px`, 'aria-hidden': 'true' },
         children: [h('td', { attrs: { colspan: String(span) } })],
     });
-}
-
-function toTsv(columns: ReadonlyArray<TableColumn>, rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
-    const header = columns.map((column) => column.title).join('\t');
-    const data = rows.map((row) => row.map((value) => (value == null ? '' : String(value))).join('\t'));
-
-    return [header, ...data].join('\n');
 }
 
 function formatNumber(value: number): string {

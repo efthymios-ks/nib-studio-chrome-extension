@@ -60,15 +60,17 @@ describe('swapSideMemory', () => {
         expect(state.json.scroll).toEqual({ modified: { top: 30, left: 0 } });
     });
 
-    it('swaps the loaded row sets', () => {
+    it('swaps the loaded row sets and the sheets picked', () => {
         const state = createDiffViewState();
-        const loaded = { source: 'a,b', rowSet: null };
+        const loaded = { source: 'a,b', request: '', rowSet: null };
         state.rows.loaded = { original: loaded };
+        state.rows.sheets = { original: 'Q2' };
 
         swapSideMemory(state);
 
         expect(state.rows.loaded.modified).toBe(loaded);
         expect(state.rows.loaded.original).toBeUndefined();
+        expect(state.rows.sheets).toEqual({ modified: 'Q2' });
     });
 
     it('restores the original memory after swapping twice', () => {

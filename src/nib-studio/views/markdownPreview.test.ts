@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { asRoot, FakeDirectoryHandle, type FakeFileHandle } from '../../common/fs/testing/fakeFileSystem.js';
+import { stubClipboard } from '../testing/fakeClipboard.js';
 import { settleAsync } from '../testing/testHelpers.js';
 import { mountMarkdownPreview, type MarkdownPreviewHandle } from './markdownPreview.js';
 
@@ -175,6 +176,35 @@ describe('mountMarkdownPreview', () => {
         expect(article.querySelector('details summary')?.textContent).toBe('More');
         expect(article.querySelector('script')).toBeNull();
         expect((window as unknown as { ran?: boolean }).ran).toBeUndefined();
+    });
+
+    it('stays sanitised, unlike an HTML file\'s preview: no handlers, scripts, frames or sandbox page', async () => {
+        mount().render([
+            '<button onclick="window.ran = true">Go</button>',
+            '<img src="../media/transparent.png" onerror="window.ran = true">',
+            '<a href="javascript:window.ran = true">run</a>',
+            '<iframe src="page.html"></iframe>',
+            '<script src="app.js"></script>',
+        ].join('\n\n'));
+        await settleAsync();
+
+        expect(article.innerHTML).not.toMatch(/onclick|onerror|javascript:|<script|<iframe/);
+        expect(article.querySelector('button')?.textContent).toBe('Go');
+        expect(document.querySelector('iframe')).toBeNull();
+        expect((window as unknown as { ran?: boolean }).ran).toBeUndefined();
+    });
+
+    it('gives each code block a Copy button that copies its code', async () => {
+        const clipboard = stubClipboard();
+        mount().render('```js\nrun();\n```');
+
+        const button = article.querySelector<HTMLButtonElement>('.md-code-wrap > pre.md-code.language-js + button.md-code-copy');
+        button?.click();
+        await settleAsync();
+
+        expect(button).not.toBeNull();
+        expect(clipboard.writeText).toHaveBeenCalledWith('run();');
+        clipboard.restore();
     });
 
     it('scrolls smoothly to a heading once the images above it have loaded', async () => {

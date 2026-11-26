@@ -85,7 +85,7 @@ describe('createPathBar', () => {
         button(pathBar.element, 'copy-path').click();
         await settleAsync();
 
-        expect(toastTexts()).toContain('Clipboard blocked.');
+        expect(toastTexts()).toContain('Could not copy: Clipboard blocked.');
     });
 
     it('hands the shown path to Use', () => {

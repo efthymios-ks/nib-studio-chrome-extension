@@ -14,6 +14,7 @@ import { renderTabBar } from '../editor/tabBar.js';
 import { toast } from '../app/toast.js';
 import { createDocumentResources } from './documentImages.js';
 import { emptyState } from './emptyState.js';
+import { buildFileCopyButtons } from './fileCopy.js';
 import { renderJsonPathPanel } from './jsonPathPanel.js';
 import {
     createJsonSchemaPanelState,
@@ -570,6 +571,16 @@ function buildToolbar(
     }));
 
     const actionGroup: HTMLElement[] = [];
+    // Copy raw and Copy formatted, or Copy content, in every view of the tab, from its text as it is now.
+    const copyButtons = buildFileCopyButtons({
+        currentFile: () => withEditorText(file),
+        root: context.workspaceRoot,
+        view: () => document.querySelector('.editor-shell'),
+    });
+
+    if (copyButtons != null) {
+        actionGroup.push(copyButtons);
+    }
 
     if (callbacks.onCompareWith != null) {
         const compareButton = h('button', {

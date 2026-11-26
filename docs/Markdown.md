@@ -1,7 +1,8 @@
 # Markdown
 
 `.md`, `.markdown` and `.mdx` files open with four view tabs: **Editor**, **Interactive**, **Split** and **Preview**.  
-The toolbar also carries a `Markdown` badge and the **Compare with…**, **Export HTML**, **Export PDF** and **Save** buttons.
+The toolbar also carries a `Markdown` badge and the **Copy raw**, **Copy formatted**, **Compare with…**,
+**Export HTML**, **Export PDF** and **Save** buttons.
 
 ## Views
 
@@ -268,8 +269,9 @@ HTML in the Markdown source renders, sanitised with DOMPurify much as GitHub doe
 - Kept: `<img>` with `src`, `alt`, `width`, `height` and `align`, `<a>`, `<p>` and `<div>` with `align`,
   `<details>` and `<summary>`, `<br>`, `<sub>`, `<sup>`, `<kbd>`, `<mark>`, `<ins>`, `<del>`, `<picture>` and `<source>`,
   tables, lists, headings, `id` and `name` anchors, and other text-level tags such as `<b>`, `<small>` and `<abbr>`.
+  A `<button>` of the document's own stays too, as written; with its handlers dropped, it runs nothing.
 - Dropped: scripts, event handlers such as `onclick`, `<style>` elements, `style` attributes, classes,
-  `<iframe>`, `<object>`, `<embed>`, forms, `<svg>`, `<base>`, `<meta>`, `<link>` and `javascript:` addresses.
+  `<iframe>`, `<object>`, `<embed>`, forms and their fields, `<svg>`, `<base>`, `<meta>`, `<link>` and `javascript:` addresses.
   A dropped tag keeps its text, except scripts, styles, frames and SVG, which go whole.
 - HTML comments are hidden.
 - The `src` of an `<img>`, the `srcset` of a `<picture>` source and the `href` of an `<a>` resolve like Markdown's own images and links.
@@ -278,16 +280,21 @@ HTML in the Markdown source renders, sanitised with DOMPurify much as GitHub doe
 
 Every heading gets an id from its text: lower case, spaces turned into hyphens,
 and every character other than letters, digits and hyphens dropped, in any script,
+with a run of hyphens made one and none at either end,
 so `## Release notes` becomes `release-notes` and `## Σύμβαση 2026` becomes `σύμβαση-2026`.  
 A repeated heading gets `-1`, `-2`, and so on; a heading with none of those characters gets no id.  
-Links such as `[see below](#release-notes)` jump within the preview.
+Links such as `[see below](#release-notes)` jump within the preview.  
+A link's `#fragment` that matches no id is read the same way,
+so GitHub's `#copy--paste` finds `## Copy & paste`.
 
 ### Code blocks
 
 Fenced code blocks render as monospace blocks, tagged with their language, without highlighting.  
-Each fenced block has a copy button in its corner, shown on hover or keyboard focus;
-it copies the block's text exactly, without the line break that ends the block, with a toast.  
-Indented code blocks have no copy button.
+Each fenced block has a `⎘` copy button in its corner, titled **Copy code**, shown on hover or keyboard focus;
+it copies the block's text exactly, without the line break that ends the block, and the toast says `Code copied.`  
+Indented code blocks have no copy button.  
+The button shows only in the studio's preview, **Split** included:
+the exported HTML and PDF pages and **Copy formatted** have none, since it works only there.
 
 ### Mermaid
 
@@ -335,13 +342,32 @@ an image that would go past that becomes a placeholder that reads
 `Image too large to embed: the page holds at most 25 MB of images (path)`, and a smaller one after it may still fit.  
 Web images keep their addresses as written, so they load when the page is opened in a browser.  
 Raw HTML comes along sanitised, as in the preview.  
-Mermaid diagrams are not drawn in the export; their blocks stay empty.  
-The copy buttons come along but do nothing outside the studio.
+Mermaid diagrams travel inside it as PNG pictures, the ones **Copy formatted** draws,
+or as SVG when the browser can't draw the PNG, so the page needs no script to show them:
+each at twice its size, so it stays sharp zoomed in or printed, and shown no wider than the page,
+on white paper in Mermaid's default theme, whatever the studio's theme.
+Diagrams don't count towards the 25 MB of images.  
+A diagram that can't be drawn shows the preview's error text in its place, in the light preview's colours.  
+Code blocks come without the preview's copy buttons.
 
 ## Export PDF
 
 **Export PDF** loads the same standalone page into a hidden frame and opens the browser's print dialog
 once every image in it has loaded, or after 10 seconds at most.  
 Pick **Save as PDF** as the destination.  
-Workspace images print as in the HTML export, web images show the same placeholder as in the preview,
-and, as with HTML export, Mermaid diagrams are left out.
+Workspace images and Mermaid diagrams print as in the HTML export, without its 25 MB limit on images,
+so a diagram prints as a picture at twice its size, or as its error text when it can't be drawn,
+and web images show the same placeholder as in the preview.
+
+## Copy
+
+**Copy raw** copies the source text, unsaved edits included.  
+**Copy formatted** copies the rendered document, to paste into Word, Outlook or Google Docs
+with its headings, lists, tables, links and pictures; see [Copy](Editor.md#copy):
+
+- Workspace pictures go inside it as `data:` URLs, at most 10 MB of pictures in all,
+  in the order they come in the document;
+  a picture past that becomes a placeholder that says so, and web pictures keep their address.
+- Mermaid diagrams go in as pictures, the ones **Export HTML** draws, and don't count towards the 10 MB;
+  a diagram that can't be drawn goes in as its source, in a code block.
+- Code blocks come without the preview's copy buttons, and raw HTML's buttons are left out.

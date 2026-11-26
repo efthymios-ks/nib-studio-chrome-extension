@@ -1,16 +1,34 @@
 import { autocompletion, completionKeymap, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { HighlightStyle, StreamLanguage, bracketMatching, syntaxHighlighting, type StringStream } from '@codemirror/language';
-import { EditorState, Prec, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, Prec, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, placeholder, type DecorationSet } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { LINQ_AGGREGATES, LINQ_FUNCTIONS, LINQ_METHODS, LINQ_PROPERTIES } from '../../common/linq/linqFunctions.js';
 import { LINQ_CONTEXTUAL_KEYWORDS, LINQ_KEYWORDS } from '../../common/linq/linqParser.js';
 import { quoteName } from '../../common/linq/linqReference.js';
+import { quoteSheetName } from '../../common/linq/linqSheets.js';
 
 export interface QueryEditorHandlers {
     onRun?: () => void;
     onChange?: (state: EditorState) => void;
+    // What completion offers for the query as typed so far, when it depends on the file
+    // or on the sheet the query names; the editor's own columns otherwise.
+    completions?: (text: string) => QueryCompletions;
+}
+
+export interface QueryCompletions {
+    // The columns of the table the query reads.
+    readonly columns: ReadonlyArray<string>;
+    // The sheets a query can name after from, in workbook order; empty for a CSV or TSV file.
+    readonly sheets: ReadonlyArray<QueryCompletionSheet>;
+    // Whether `from *` reads the file: a CSV or TSV file, or a workbook of one sheet.
+    readonly allowsStar: boolean;
+}
+
+export interface QueryCompletionSheet {
+    readonly name: string;
+    readonly hidden: boolean;
 }
 
 export interface QueryEditorOptions {
@@ -28,6 +46,8 @@ export interface QueryEditorHandle {
     setText(text: string): void;
     // Underlines a span of the query, or clears the mark for null.
     markError(span: { start: number; end: number } | null): void;
+    // Changes the grey sample query shown while the editor is empty.
+    setPlaceholder(text: string): void;
     focus(): void;
     destroy(): void;
 }
@@ -178,8 +198,47 @@ const errorField = StateField.define<DecorationSet>({
     provide: (field) => EditorView.decorations.from(field),
 });
 
-function completionSource(columns: ReadonlyArray<string>): (context: CompletionContext) => CompletionResult | null {
-    const columnOptions: Completion[] = columns.map((column) => ({ label: quoteName(column), type: 'variable', detail: 'column' }));
+// The sample query in grey while the editor is empty, for a source such as `*` or a sheet's name.
+export function queryPlaceholder(source: string): string {
+    return `from row in ${source === '*' ? 'table' : source}\nwhere row.total > 100\nselect row`;
+}
+
+const placeholderSlot = new Compartment();
+
+// A sheet name being typed right after `from`, or after `from row in`: bare, quoted, bracketed or in backticks.
+const SHEET_NAME_BEFORE = /\bfrom\s+(?:[A-Za-z_]\w*\s+in\s+)?(?:\[[^\]\n]*|'[^'\n]*|"[^"\n]*|`[^`\n]*|[A-Za-z_]\w*)?$/i;
+const SHEET_NAME_TYPED = /(?:\[[^\]\n]*|'[^'\n]*|"[^"\n]*|`[^`\n]*|[A-Za-z_]\w*)$/;
+
+// Each sheet written the way the typing started: in brackets, double quotes or backticks,
+// or as quoteSheetName writes it.
+const SHEET_WRITERS: ReadonlyArray<{ readonly opening: string; readonly write: (name: string) => string }> = [
+    { opening: '[', write: (name) => `[${name}]` },
+    { opening: '"', write: (name) => JSON.stringify(name) },
+    { opening: '`', write: (name) => `\`${name}\`` },
+];
+
+// After `from row in`, the whole table is `table` rather than `*`.
+function sheetOptions(completions: QueryCompletions, typed: string, afterIn: boolean): Completion[] {
+    const write = SHEET_WRITERS.find((writer) => typed.startsWith(writer.opening))?.write ?? quoteSheetName;
+    const whole = afterIn ? 'table' : '*';
+
+    return [
+        ...completions.sheets.map((sheet) => ({
+            label: write(sheet.name),
+            type: 'class',
+            detail: sheet.hidden ? 'hidden sheet' : 'sheet',
+            boost: sheet.hidden ? -1 : 0,
+        })),
+        ...(completions.allowsStar ? [{ label: whole, type: 'keyword', detail: 'the only sheet' }] : []),
+    ];
+}
+
+function completionSource(
+    columns: ReadonlyArray<string>,
+    handlers: QueryEditorHandlers,
+): (context: CompletionContext) => CompletionResult | null {
+    const columnOptionsOf = (names: ReadonlyArray<string>): Completion[] => names
+        .map((column) => ({ label: quoteName(column), type: 'variable', detail: 'column' }));
     const keywordOptions: Completion[] = [...KEYWORDS, 'true', 'false', 'null'].map((word) => ({ label: word, type: 'keyword' }));
     const functionOptions: Completion[] = [
         ...LINQ_AGGREGATES.map((entry) => ({ label: entry.name, type: 'function', detail: 'aggregate', info: entry.description, apply: `${entry.name}(` })),
@@ -199,6 +258,20 @@ function completionSource(columns: ReadonlyArray<string>): (context: CompletionC
     }));
 
     return (context) => {
+        const completions = handlers.completions?.(context.state.doc.toString()) ?? null;
+        const columnOptions = columnOptionsOf(completions?.columns ?? columns);
+        const sheetContext = completions == null || completions.sheets.length === 0 ? null : context.matchBefore(SHEET_NAME_BEFORE);
+
+        if (completions != null && sheetContext != null) {
+            const typed = context.state.sliceDoc(sheetContext.from, context.pos).match(SHEET_NAME_TYPED)?.[0] ?? '';
+
+            if (typed !== '' || context.explicit || /\s$/.test(sheetContext.text)) {
+                const afterIn = /\s+in\s+\S*$/i.test(sheetContext.text);
+
+                return { from: context.pos - typed.length, options: sheetOptions(completions, typed, afterIn) };
+            }
+        }
+
         const word = context.matchBefore(/`[^`]*|[A-Za-z_]\w*/);
         const from = word?.from ?? context.pos;
 
@@ -231,8 +304,8 @@ function buildExtensions(columns: ReadonlyArray<string>, handlers: QueryEditorHa
         linqLanguage,
         syntaxHighlighting(linqHighlight),
         errorField,
-        placeholder('from row in table\nwhere row.total > 100\nselect row'),
-        autocompletion({ override: [completionSource(columns)], activateOnTyping: true }),
+        placeholderSlot.of(placeholder(queryPlaceholder('*'))),
+        autocompletion({ override: [completionSource(columns, handlers)], activateOnTyping: true }),
         Prec.highest(keymap.of([
             {
                 key: 'Mod-Enter',
@@ -274,6 +347,9 @@ export function mountQueryEditor(options: QueryEditorOptions): QueryEditorHandle
         },
         markError: (span) => {
             view.dispatch({ effects: setErrorMark.of(span) });
+        },
+        setPlaceholder: (text) => {
+            view.dispatch({ effects: placeholderSlot.reconfigure(placeholder(text)) });
         },
         focus: () => view.focus(),
         destroy: () => view.destroy(),

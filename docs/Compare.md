@@ -35,6 +35,7 @@ Asking for the same pair again, in either order, focuses the diff tab that alrea
   **Close**, **Close others**, **Close to the right** and **Close all**.
   **Reveal in Explorer** shows when the modified side is a workspace file,
   and selects its row and focuses the tree as on a file tab; see [Explorer](Explorer.md#reveal-in-tree).
+  **Close others** and **Close to the right** show only when there are such tabs to close.
   See [Exports](#exports) for the two exports.
 - Activating a diff tab reveals its modified side in the Explorer when that side is a workspace file.
 - `Ctrl+S` does nothing in a diff tab; there is nothing to save.
@@ -73,6 +74,9 @@ Choosing an entry opens the diff tab at once; `Esc` or a click outside cancels a
 - **File from disk…:** the browser's file picker; the file need not be in the workspace.
 - **Clipboard:** the text on the clipboard; the browser asks for access the first time,
   and the button is left out when the browser offers no clipboard.
+  A clipboard with no text says `The clipboard holds no text.`,
+  and a refused one `Nib Studio was not allowed to read the clipboard.`, as for every read of the clipboard,
+  and no diff tab opens.
 - **Paste text…:** a box to paste or type the other side into, and **Compare** to use it.
 
 Comparable means the same engine: JSON with JSON, YAML with YAML, tables with tables,
@@ -143,10 +147,10 @@ paste one on the left, one on the right, and keep pasting to change either side.
 The diff is computed again as soon as a side changes.  
 These work in every diff tab, not only in new compares:
 
-- **Ctrl+V:** replaces the side under the pointer, or the side that has focus.
+- **Ctrl+V:** replaces the side that has focus, or else the side under the pointer.
   With neither, it fills the first empty side.
   It works wherever the focus is in the tab, or with the focus nowhere, as after a click on the tab's title.
-  Pasting into a text box, such as the path filter, pastes there as usual.  
+  Pasting into a text box, such as the chooser's **Search workspace files** box, pastes there as usual.  
   When the **Compare with…** chooser closes, the focus goes back where it was before it opened,
   and no caret is left behind in the page, so a later `Ctrl+V` still reaches the compare.
 - **Edit:** the side's text opens in an editor in place of the diff,
@@ -402,7 +406,7 @@ A rendered, document-style diff in a frame, built from the original and modified
 - Tables align cell by cell; code blocks diff line by line.
 - A changed Mermaid diagram renders on both sides, with **Before** and **After** tabs.
 - Each entry in **Changes** jumps to its change; links within the document jump too, and web links open in a new browser tab.
-- The floating bar switches between **Diff**, **Before** and **After**, steps through changes with `↑` and `↓` (or `n` and `p`),
+- The floating bar switches between **Diff**, **Before** and **After**, steps through changes with its `↑` and `↓` buttons, or `n` and `p`,
   shows the position, such as `3 / 12`, and `⇄` opens a side-by-side modal.
   Clicking any change opens the modal too; `←`, `→` and `Esc` work inside it,
   and on a diagram its magnifier button turns on a lens that follows the pointer.
@@ -419,8 +423,8 @@ Compares two tables row by row, keyed by columns.
 
 - The toolbar button reads `Match: id · Sort rows: none` and opens the [rules picker](#the-rules-picker),
   for the key columns and the columns to sort rows by.
-  Until you pick, Nib Studio suggests the first shared column named `id`, `key`, `code`, `sku`, `uuid` or `name`,
-  ignoring case, and otherwise the first shared column.
+  Until you pick, Nib Studio suggests a shared column named `id`, `key`, `code`, `sku`, `uuid` or `name`,
+  in that order, ignoring case, and otherwise the first shared column.
 - One aligned table shows both files side by side, with a shared scroll:
   rows paired by key sit on the same line, and a row only one file has shows a placeholder row on the other side.
   Each side's `#` column shows the row's key.
@@ -428,7 +432,15 @@ Compares two tables row by row, keyed by columns.
 - A column only one file has shows as a placeholder column on the other side, and its cells don't count as differences.
 - Changed cells are highlighted on both sides; their tooltip reads **Original** and **Modified**, with `∅` for an empty cell.
 - **Sort columns** orders the columns by name; it is off by default, so each file's column order shows.
-- The first row of each file is the header; workbooks use their first sheet.
+- The first row of each file, or of each sheet, is the header.
+- **Sheets:** a workbook with more than one sheet gets a picker in the toolbar, **Original sheet** or **Modified sheet**,
+  listing its sheets in order, hidden ones marked `(hidden)`.
+  The original starts on the sheet its table tab shows, or its first visible sheet;
+  the modified side starts on the sheet with the same name, ignoring case, when it has one.
+  Picking the original's sheet moves the modified side to the sheet of the same name too,
+  and picking the modified side's sheet on its own compares two different sheets.
+  When the sheets picked lack the key columns chosen, the key columns are suggested again.
+  A workbook is read once while its tab or the compare is open, so changing the sheet is quick.
 - Stepping to a change with the [diff bar](#the-diff-bar) scrolls to it,
   flashes the whole row or both cells of a changed value, and outlines the row.
 
@@ -466,16 +478,23 @@ It follows the system's light or dark setting.
 
 - The same side-by-side layout as the diff tab, under the **Original** and **Modified** headers,
   with hatched placeholders where a side has nothing.
+  A workbook's header names the sheet compared, such as `data/sales-2026.xlsx · Sheet: Q2`.
 - JSON, YAML and XML objects and arrays start open or closed as in the tab, and their twists open and close them.
 - The bar at the bottom right: **Diff**, **Before** and **After**, the position, and **Previous** and **Next**,
   with `p`, `n`, `↑` and `↓` as in the tab;
   stepping to a change inside a closed object opens it.
+  Printed, the page leaves out the bar.
 - Clicking a change makes it the current one.
 - Everything from the files is escaped, so a value never turns into markup,
   and the page's content policy forbids loading anything.
 
-A Markdown export is the Markdown diff page itself, the same page the tab shows;
-only the ids Mermaid gives the parts of each diagram differ from one drawing to the next.
+A Markdown export is the Markdown diff page itself, the same page the tab shows,
+light whatever the system's setting, with `n` and `p` for keys and `↑` and `↓` as buttons;
+only the ids Mermaid gives the parts of each diagram differ from one drawing to the next.  
+Printed, it leaves out its on-page controls: the copy buttons, **Enlarge**, the **Diff**, **Before** and **After** bar,
+and the **Before** and **After** tab labels.
+A changed diagram or table prints both sides, each labelled **Before** or **After**,
+and the **Changes** list prints in full.
 
 ### The JSON format
 
@@ -537,7 +556,7 @@ and its cells carry the node's `depth`, `label`, `path` and `node`.
 | --- | --- |
 | `format`, `version` | always `nib-studio-diff` and `1` |
 | `kind` | `text`, `json`, `yaml`, `xml`, `rows` or `markdown` |
-| `original`, `modified` | each side's `name`; its `source`, one of `file`, `open-tab`, `disk`, `clipboard`, `pasted` or `edited`; and the `path` of a file |
+| `original`, `modified` | each side's `name`; its `source`, one of `file`, `open-tab`, `disk`, `clipboard`, `pasted` or `edited`; the `path` of a file; and the `sheet` compared, for a workbook |
 | `options` | the rules and options the compare used, such as the text compare rules, the array or element rules, or the key columns |
 | `summary` | the changes counted by kind; a text diff adds its added, removed and ignored `lines`, and a table or a Markdown diff its `unchanged` rows or blocks |
 | `changes` | every change, top to bottom: its `id`, its `kind`, one of `added`, `removed`, `changed` or `typeChanged`, its `location`, the first `row` that shows it, and its `before` and `after` values |

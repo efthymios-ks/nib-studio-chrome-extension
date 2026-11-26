@@ -61,8 +61,9 @@ import {
     setFilesSurfaceView,
 } from '../views/filesSurface.js';
 import type { WorkspaceLinkTarget } from '../views/workspaceLinks.js';
+import { copyDiskTextAsync, diskCopyRefusal } from '../views/fileCopy.js';
 import { renderHashSurface } from '../views/hashSurface.js';
-import { pruneTableMemories } from '../views/tableViewer.js';
+import { onSheetLabelChange, pruneTableMemories, revealSheet } from '../views/tableViewer.js';
 import { holdsNoText, pickViewer } from '../views/viewerKinds.js';
 import { prunePreviewMemories } from '../views/previewFrame.js';
 import { applyJsonTransform } from '../views/jsonActions.js';
@@ -93,6 +94,17 @@ import {
 import { registerDesktopDrop, type DesktopDropHandle } from './desktopDrop.js';
 import { registerSaveShortcutGuard } from './saveShortcut.js';
 import {
+    canReadClipboard,
+    freeClipboardName,
+    isOpenablePaste,
+    isPastedTab,
+    pastedTab,
+    pasteProblem,
+    readClipboardPasteAsync,
+    readClipboardTextAsync,
+    type PastedFile,
+} from './clipboardPaste.js';
+import {
     isDroppedFile,
     isDroppedFolder,
     type DroppedFile,
@@ -118,6 +130,7 @@ import {
 } from './diffTabs.js';
 import { applyTheme, nextTheme } from './theme.js';
 import { toast } from './toast.js';
+import { copyFailureMessage, copyTextAsync, copyTextWithToastAsync } from './clipboard.js';
 import { confirmActionAsync, pickFileFromDiskAsync } from './dialogs.js';
 import { showDialogAsync, type DialogPath } from './dialog.js';
 import { showTextInputModalAsync } from './modal.js';
@@ -184,6 +197,7 @@ export class App {
     private desktopDropHandle: DesktopDropHandle | null = null;
 
     private readonly removeSaveShortcutGuard: () => void;
+    private readonly removeSheetLabelListener: () => void;
 
     // Numbers the tabs of files opened from outside the workspace.
     private externalTabCount = 0;
@@ -223,6 +237,8 @@ export class App {
         this.shell.explorer.before(this.lookupBox.element);
         this.installExplorerIntegrations();
         this.removeSaveShortcutGuard = registerSaveShortcutGuard(root.ownerDocument, () => this.saveFromShortcut());
+        // The status bar names the sheet a workbook shows, which changes without the store changing.
+        this.removeSheetLabelListener = onSheetLabelChange(() => renderStatusBar(this.shell.status, this.store.getState()));
         this.store.subscribe((state) => this.onStateChange(state));
     }
 
@@ -235,6 +251,7 @@ export class App {
         this.desktopDropHandle = null;
         this.shell.explorerDrawer.dispose();
         this.removeSaveShortcutGuard();
+        this.removeSheetLabelListener();
         this.disposeWatcher();
         this.lookupBox.dispose();
         this.disposeLookup();
@@ -1505,8 +1522,18 @@ export class App {
         const state = this.store.getState();
         const file = state.openFiles.find((item) => item.path === path);
 
-        // A large table, a document or a preview holds no text, so writing it back would empty the file.
-        if (file == null || holdsNoTextInMemory(file)) {
+        if (file == null) {
+            return false;
+        }
+
+        // A paste is on no disk yet, a picture included, so saving asks where it goes.
+        if (isPastedTab(file)) {
+            return await this.savePastedAsync(file);
+        }
+
+        // A large table, a document or a preview holds no text, so writing it back would empty the file;
+        // a table is view only, and a workbook's text is its bytes read as text, so writing it would break the file.
+        if (holdsNoTextInMemory(file) || pickViewer(basename(file.path)) === 'table') {
             return false;
         }
 
@@ -1572,11 +1599,125 @@ export class App {
         return utf8.ok ? { bytes: utf8.bytes, encoding: 'utf-8' } : null;
     }
 
+    // What a save writes: a pasted picture's own bytes, or the text as encodeForSaveAsync encodes it.
+    private async contentForSaveAsync(file: OpenFile): Promise<{ readonly blob: Blob; readonly encoding: TextEncoding } | null> {
+        if (isPastedTab(file) && file.file != null) {
+            return { blob: file.file, encoding: file.encoding ?? 'utf-8' };
+        }
+
+        const encoded = await this.encodeForSaveAsync(file);
+
+        return encoded == null ? null : { blob: new Blob([encoded.bytes]), encoding: encoded.encoding };
+    }
+
+    // A paste saves into the workspace under a name it asks for, in the folder selected in the Explorer or at the root,
+    // and its tab becomes that file's tab. With no workspace open, the browser's save dialog asks where it goes.
+    private async savePastedAsync(file: PastedFile): Promise<boolean> {
+        const workspace = this.store.getState().workspace;
+
+        if (workspace == null) {
+            return await this.saveExternalAsync(file, file.external);
+        }
+
+        const folder = this.selectedFolder();
+        // A tab such as a conversion takes its name before it is on disk.
+        const tabNames = this.store.getState().openFiles
+            .filter((open) => !isExternalPath(open.path) && parentPath(open.path) === folder)
+            .map((open): [string, FileSystemHandleKind] => [basename(open.path), 'file']);
+        const taken = new Map([...await this.listFolderEntriesAsync(workspace.handle, folder), ...tabNames]);
+        const name = await showTextInputModalAsync({
+            title: `Save ${basename(file.path)}`,
+            label: 'Name',
+            initialValue: freeClipboardName(basename(file.path), taken.keys()),
+            confirmLabel: 'Save',
+            selectionRange: 'basename',
+            hint: folder === '' ? 'Will be saved at the workspace root.' : `Will be saved in ${folder}/`,
+            validate: (value) => this.validateName(value) ?? takenNameMessage(value, taken),
+        });
+        const current = this.store.getState().openFiles.find((open) => open.path === file.path);
+
+        if (name == null || current == null) {
+            return false;
+        }
+
+        return await this.savePastedToWorkspaceAsync(current, joinPath(folder, name));
+    }
+
+    private async savePastedToWorkspaceAsync(file: OpenFile, path: string): Promise<boolean> {
+        const workspace = this.store.getState().workspace;
+        const name = basename(path);
+        const content = await this.contentForSaveAsync(file);
+
+        if (workspace == null || content == null) {
+            return false;
+        }
+
+        try {
+            // A file of that name may have appeared while the name was asked for; it is never overwritten.
+            const existing = await entryKindAsync(workspace.handle, path);
+
+            if (existing != null) {
+                toast(nameTakenMessage(name, existing), 'fail');
+
+                return false;
+            }
+
+            await writeBytesAsync(workspace.handle, path, content.blob);
+            const snapshot = await getFileAsync(workspace.handle, path);
+            const written = file.text;
+            const latest = this.store.getState();
+            renameEditorSession(file.path, path);
+            renameFilesSurfaceMemory(file.path, path);
+            // Edits made while the file was being written stay unsaved.
+            const saved = ({ external: _pasted, ...item }: OpenFile): OpenFile => ({
+                ...item,
+                path,
+                originalText: written,
+                dirty: item.text !== written,
+                encoding: content.encoding,
+                file: snapshot,
+            });
+            this.store.update({
+                openFiles: latest.openFiles.map((item) => item.path === file.path ? saved(item) : item),
+                activePath: latest.activePath === file.path ? path : latest.activePath,
+                selectedPath: path,
+            });
+            toast(`${name} saved.`, 'ok');
+            await this.refreshTreeAsync();
+            this.revealInTree(path);
+
+            return true;
+        }
+        catch (error) {
+            toast(errorMessage(error, 'Save failed.'), 'fail');
+
+            return false;
+        }
+    }
+
+    private isPastedPath(path: string): boolean {
+        return this.store.getState().openFiles.some((open) => open.path === path && isPastedTab(open));
+    }
+
+    // The folder selected in the Explorer, or the folder of the file selected there; the workspace root when there is none.
+    private selectedFolder(): string {
+        const first = orderedSelection(this.explorer.selection, this.explorer.visiblePaths)[0];
+
+        if (first == null) {
+            return '';
+        }
+
+        return this.isDirectory(first) ? first : parentPath(first);
+    }
+
     // A file from outside the workspace saves back to the file it came from,
-    // or, when the browser gave no handle for it, to a file the user picks.
+    // or, when the browser gave no handle for it, to a file the user picks, as a paste does while no workspace is open.
     private async saveExternalAsync(file: OpenFile, external: ExternalFile): Promise<boolean> {
         const name = basename(file.path);
-        const handle = external.handle ?? await this.pickSaveTargetAsync(name);
+        const reason = external.pasted === true
+            ? `No workspace is open, so choose where to save ${name}.`
+            : `${name} was opened from outside the workspace without a link to the original file. Choose where to save it.`;
+        const handle = external.handle ?? await this.pickSaveTargetAsync(name, reason);
 
         if (handle == null) {
             return false;
@@ -1589,14 +1730,14 @@ export class App {
         }
 
         const written = file.text;
-        const encoded = await this.encodeForSaveAsync(file);
+        const content = await this.contentForSaveAsync(file);
 
-        if (encoded == null) {
+        if (content == null) {
             return false;
         }
 
         try {
-            await writeHandleAsync(handle, new Blob([encoded.bytes]));
+            await writeHandleAsync(handle, content.blob);
             const snapshot = await handle.getFile().catch(() => file.file);
             const path = handle.name === name ? file.path : joinPath(parentPath(file.path), handle.name);
             const latest = this.store.getState();
@@ -1611,7 +1752,7 @@ export class App {
                 path,
                 originalText: written,
                 dirty: item.text !== written,
-                encoding: encoded.encoding,
+                encoding: content.encoding,
                 file: snapshot,
                 external: { handle },
             });
@@ -1630,10 +1771,10 @@ export class App {
         }
     }
 
-    private async pickSaveTargetAsync(name: string): Promise<FileSystemFileHandle | null> {
+    private async pickSaveTargetAsync(name: string, reason: string): Promise<FileSystemFileHandle | null> {
         const confirmed = await confirmActionAsync({
             title: 'Save as',
-            body: `${name} was opened from outside the workspace without a link to the original file. Choose where to save it.`,
+            body: reason,
             confirmLabel: 'Save as…',
         });
 
@@ -2551,8 +2692,41 @@ export class App {
         return DIFF_KINDS.map((kind) => ({ label: DIFF_KIND_MENU_LABELS[kind], onSelect: () => void this.newCompare(kind) }));
     }
 
+    // The "+" menu: the compares, then Paste from clipboard, left out where the browser can't read the clipboard.
     private showNewCompareMenu(event: MouseEvent): void {
-        openExplorerMenu(event, [{ items: this.newCompareMenuItems() }]);
+        openExplorerMenu(event, [
+            { items: this.newCompareMenuItems() },
+            {
+                items: [{
+                    label: 'Paste from clipboard',
+                    disabled: !canReadClipboard(),
+                    onSelect: () => void this.pasteFromClipboardAsync(),
+                }],
+            },
+        ]);
+    }
+
+    // Opens what is on the clipboard in an unsaved tab of its own: text by the format it reads as, such as `Clipboard.json`,
+    // or else a picture in the image preview. It opens in the view a file of its type opens in.
+    private async pasteFromClipboardAsync(): Promise<void> {
+        const paste = await readClipboardPasteAsync(navigator.clipboard);
+
+        if (!isOpenablePaste(paste)) {
+            const problem = pasteProblem(paste);
+
+            if (problem != null) {
+                toast(problem.message, problem.tone);
+            }
+
+            return;
+        }
+
+        const state = this.store.getState();
+        const openNames = state.openFiles.map((open) => basename(open.path));
+        this.externalTabCount += 1;
+        const tab = pastedTab(paste, { id: this.externalTabCount, openNames });
+        this.chooseViewForOpenedFile(basename(tab.path), false);
+        this.store.update({ openFiles: [...state.openFiles, tab], activePath: tab.path, activeSurface: 'files' });
     }
 
     // A workspace file as a diff side: the open tab's text when it is open, so unsaved edits are compared.
@@ -2642,16 +2816,9 @@ export class App {
     }
 
     private async clipboardSideAsync(): Promise<DiffSide | null> {
-        try {
-            const text = await navigator.clipboard.readText();
+        const text = await readClipboardTextAsync(navigator.clipboard);
 
-            return { label: 'Clipboard', source: 'clipboard', text };
-        }
-        catch (error) {
-            toast(errorMessage(error, 'Could not read clipboard.'), 'fail');
-
-            return null;
-        }
+        return text == null ? null : { label: 'Clipboard', source: 'clipboard', text };
     }
 
     // A file picked from disk, read as text only once its first bytes show it is text; null when it isn't, or the picker is closed.
@@ -2777,7 +2944,7 @@ export class App {
             title,
             openTabs,
             listWorkspaceFilesAsync: async () => await this.listComparableFilesAsync(kind, exclude),
-            clipboardAvailable: typeof navigator.clipboard !== 'undefined',
+            clipboardAvailable: canReadClipboard(),
         });
 
         if (choice == null) {
@@ -2916,72 +3083,71 @@ export class App {
         });
     }
 
+    // Copies a file's text as the studio holds it: an open tab's text as it is now, unsaved edits and pastes included,
+    // as the toolbar's Copy content does; a file not open, or a table too large to load, as saved on disk,
+    // up to the size Copy raw reads. Over 10 MB it asks first.
     private async copyContentAsync(path: string): Promise<void> {
-        try {
-            const text = await this.readSavedTextAsync(path);
+        const confirmation = `${basename(path)} copied.`;
 
-            if (text == null) {
+        try {
+            const open = this.store.getState().openFiles.find((file) => file.path === path && file.large !== true);
+
+            if (open != null) {
+                if (await this.confirmLargeCopyAsync(path, open.text.length)) {
+                    await copyTextAsync(open.text);
+                    toast(confirmation, 'ok');
+                }
+
                 return;
             }
 
-            if (text.length > COPY_CONTENT_WARN_BYTES) {
-                const confirmed = await confirmActionAsync({
-                    title: 'Copy large file',
-                    body: `${basename(path)} is larger than 10 MB. Copy to clipboard anyway?`,
-                    paths: [{ label: 'File', path: displayPath(path) }],
-                    confirmLabel: 'Copy',
-                });
+            const onDisk = await this.savedFileAsync(path);
+            const refusal = onDisk == null ? null : diskCopyRefusal(onDisk.size);
 
-                if (!confirmed) {
-                    return;
-                }
+            if (refusal != null) {
+                toast(refusal.message, refusal.tone);
+
+                return;
             }
 
-            await navigator.clipboard.writeText(text);
-            toast(`${basename(path)} copied.`, 'ok');
+            if (onDisk != null && await this.confirmLargeCopyAsync(path, onDisk.size)) {
+                await copyDiskTextAsync(onDisk);
+                toast(confirmation, 'ok');
+            }
         }
         catch (error) {
-            toast(errorMessage(error, 'Copy failed.'), 'fail');
+            toast(copyFailureMessage(error), 'fail');
         }
     }
 
-    // A file's text as saved on disk: a workspace file from the workspace, and a file from outside it through its handle,
-    // or from the copy it opened with when the browser gave none; null when there is nothing to read it from.
-    private async readSavedTextAsync(path: string): Promise<string | null> {
+    private async confirmLargeCopyAsync(path: string, size: number): Promise<boolean> {
+        if (size <= COPY_CONTENT_WARN_BYTES) {
+            return true;
+        }
+
+        return await confirmActionAsync({
+            title: 'Copy large file',
+            body: `${basename(path)} is larger than 10 MB. Copy to clipboard anyway?`,
+            paths: [{ label: 'File', path: displayPath(path) }],
+            confirmLabel: 'Copy',
+        });
+    }
+
+    // A file as saved on disk: a workspace file from the workspace, and a file from outside it through its handle,
+    // or the copy it opened with when the browser gave none; null when there is nothing to read it from.
+    private async savedFileAsync(path: string): Promise<Blob | null> {
         const state = this.store.getState();
         const outside = state.openFiles.find((file) => file.path === path && file.external != null);
 
         if (outside != null) {
-            const file = await outside.external?.handle?.getFile() ?? outside.file;
-
-            return file == null ? null : (await readTextBlobAsync(file)).text;
+            return await outside.external?.handle?.getFile() ?? outside.file;
         }
 
         if (state.workspace == null) {
             return null;
         }
 
-        return (await readFileAsync(state.workspace.handle, path)).text;
-    }
-
-    private async copyNameAsync(path: string): Promise<void> {
-        try {
-            await navigator.clipboard.writeText(basename(path));
-            toast('Name copied.', 'ok');
-        }
-        catch (error) {
-            toast(errorMessage(error, 'Copy failed.'), 'fail');
-        }
-    }
-
-    private async copyPathAsync(path: string): Promise<void> {
-        try {
-            await navigator.clipboard.writeText(path);
-            toast('Path copied.', 'ok');
-        }
-        catch (error) {
-            toast(errorMessage(error, 'Copy failed.'), 'fail');
-        }
+        return await getFileAsync(state.workspace.handle, path);
     }
 
     // The open workspace's Lookup, started the first time its box takes focus. Each time the box takes focus,
@@ -3048,7 +3214,7 @@ export class App {
     }
 
     // Opens a file Lookup found in a permanent tab. A content match in a text file opens in Editor with the match selected,
-    // and a Word or PDF preview finds its first match.
+    // a Word or PDF preview finds its first match, and a workbook shows the sheet of its first match.
     private async openLookupResultAsync(result: LookupResult, query: string): Promise<void> {
         const viewer = pickViewer(basename(result.path));
         const preview = result.preview;
@@ -3072,6 +3238,11 @@ export class App {
         }
 
         await this.openFileAsync(result.path, { preview: false });
+
+        // A match in a workbook shows the sheet it is on.
+        if (preview?.sheet != null && viewer === 'table') {
+            revealSheet(result.path, preview.sheet.name);
+        }
 
         // Opening chose a view for the file, such as Preview for Markdown; the match is selected in Editor.
         if (selectsMatch) {
@@ -3365,7 +3536,7 @@ export class App {
             tabIds: state.tabOrder,
             dirtyPaths: state.openFiles.filter((file) => file.dirty).map((file) => file.path),
             workspaceOpen: state.workspace != null,
-            clipboardAvailable: typeof navigator.clipboard !== 'undefined',
+            clipboardAvailable: canReadClipboard(),
             // A tab is a file even while its folder is collapsed, or it lies outside the workspace, so no row shows it.
             isFile: (path) => {
                 if (state.openFiles.some((file) => file.path === path)) {
@@ -3414,6 +3585,19 @@ export class App {
                 run: (context) => {
                     if (context.activeTabPath != null) {
                         this.revealInExplorer(context.activeTabPath);
+                    }
+                },
+            },
+            {
+                id: 'save-pasted',
+                label: 'Save…',
+                appearsIn: 'tab',
+                group: 0,
+                // A pasted table or picture has no Save button in its toolbar.
+                enabledWhen: (context) => context.activeTabPath != null && this.isPastedPath(context.activeTabPath),
+                run: (context) => {
+                    if (context.activeTabPath != null) {
+                        void this.saveAsync(context.activeTabPath);
                     }
                 },
             },
@@ -3608,7 +3792,7 @@ export class App {
                     const path = firstSelected(context) ?? context.activeTabPath;
 
                     if (path != null) {
-                        void this.copyNameAsync(path);
+                        void copyTextWithToastAsync(basename(path), 'Name copied.');
                     }
                 },
             },
@@ -3624,7 +3808,7 @@ export class App {
                     const path = firstSelected(context) ?? context.activeTabPath;
 
                     if (path != null) {
-                        void this.copyPathAsync(path);
+                        void copyTextWithToastAsync(path, 'Path copied.');
                     }
                 },
             },

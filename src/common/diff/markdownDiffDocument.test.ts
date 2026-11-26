@@ -89,10 +89,10 @@ const MODIFIED = [
     '',
 ].join('\n');
 
-// The Markdown diff page for ORIGINAL and MODIFIED as the renderer drew it before diff documents existed.
+// The Markdown diff page for ORIGINAL and MODIFIED, pinned byte for byte so any change to it is a deliberate one.
 const GOLDEN_PAGE = Object.freeze({
-    length: 27083,
-    sha256: '5ee4ddb34e2f5951a985de7cb54e096099d818e48bb9f2e0b241a86a8331067f',
+    length: 27552,
+    sha256: 'b6d38b7eafa9236b3a44ceb9db7acdf24e9c9dbdd57b7232be37bd5be61cc568',
 });
 
 // The page the Markdown renderer draws straight from both texts, with no diff document between them.
@@ -165,7 +165,7 @@ describe('buildMarkdownDiffDocument', () => {
 });
 
 describe('Markdown diff page', () => {
-    it('draws exactly the page the Markdown renderer drew before diff documents existed', async () => {
+    it('draws the pinned Markdown diff page byte for byte', async () => {
         const html = await renderDiffDocumentHtmlAsync(build());
 
         expect(html.length).toBe(GOLDEN_PAGE.length);

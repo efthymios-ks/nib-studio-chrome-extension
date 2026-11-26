@@ -62,7 +62,7 @@ export class LargeCsvSource implements TableLargeSource {
     static async openAsync(file: Blob, fileName: string): Promise<LargeCsvSource> {
         const sample = await file.slice(0, SAMPLE_BYTES).text();
         const delimiter = extension(fileName) === 'tsv' ? '\t' : detectDelimiter(sample);
-        const header = parseCsvRecords(sample.replace(/^﻿/, ''), delimiter)[0] ?? [];
+        const header = parseCsvRecords(sample.replace(/^\uFEFF/, ''), delimiter)[0] ?? [];
         const columns = header.map((name, index) => (name.trim() === '' ? `Column ${index + 1}` : name));
 
         return new LargeCsvSource(file, delimiter, columns);

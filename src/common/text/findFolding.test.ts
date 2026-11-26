@@ -25,7 +25,7 @@ describe('foldKeepingOffsets', () => {
     });
 
     it('turns a no-break space into a plain one', () => {
-        expect(foldKeepingOffsets('10 km')).toBe('10 km');
+        expect(foldKeepingOffsets('10\u00A0km')).toBe('10 km');
     });
 
     it('keeps a character whose fold has another length, such as a combining mark, which folds to nothing', () => {

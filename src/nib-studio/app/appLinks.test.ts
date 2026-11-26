@@ -1,5 +1,3 @@
-// @vitest-environment-options {"settings":{"handleDisabledFileLoadingAsSuccess":true}}
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeFileHandle } from '../../common/fs/testing/fakeFileSystem.js';
 import { createAppHarness, openHarnessWorkspaceAsync, openPaths, treeRow, type AppHarness } from '../testing/appHarness.js';

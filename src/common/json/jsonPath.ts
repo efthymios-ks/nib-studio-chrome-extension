@@ -3,7 +3,7 @@ import type { JsonPathSegment } from '../paths/jsonPathBuilder.js';
 import { errorMessage } from '../errorMessage.js';
 
 export interface JsonPathMatch {
-    // The normalized path, such as `$['orders'][0]['id']`.
+    // The normalised path, such as `$['orders'][0]['id']`.
     readonly path: string;
     readonly value: unknown;
     // Where the value sits in the document, or null when it is not one of its values, such as an array's `length`.

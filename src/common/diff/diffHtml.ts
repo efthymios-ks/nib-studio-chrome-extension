@@ -162,11 +162,15 @@ function renderBar(changeCount: number): string {
     ].join('');
 }
 
+// A workbook's side also names the sheet compared.
 function renderSideHeader(which: 'original' | 'modified', side: DiffDocumentSide): string {
+    const source = SOURCE_DETAILS[side.source](side);
+    const detail = side.sheet == null ? source : `${source} · Sheet: ${side.sheet}`;
+
     return `<div class="nd-side-header" data-side="${which}">`
         + `<span class="nd-badge">${SIDE_BADGES[which]}</span>`
         + `<span class="nd-name">${escapeHtml(side.name)}</span>`
-        + `<span class="nd-detail">${escapeHtml(SOURCE_DETAILS[side.source](side))}</span>`
+        + `<span class="nd-detail">${escapeHtml(detail)}</span>`
         + '</div>';
 }
 

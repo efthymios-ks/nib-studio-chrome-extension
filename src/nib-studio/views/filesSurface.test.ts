@@ -17,6 +17,7 @@ import type { OpenPdf } from './pdfSavePagesDialog.js';
 import { exportMarkdownToHtmlAsync, exportMarkdownToPdfAsync } from './markdownActions.js';
 import { renderMermaidIntoAsync } from './mermaidBridge.js';
 import { renderTableViewerAsync } from './tableViewer.js';
+import { drawSandboxPage } from '../testing/sandboxFrames.js';
 import {
     activeViewTab,
     blurEditor,
@@ -1120,19 +1121,20 @@ describe('renderFilesSurface', () => {
             vi.restoreAllMocks();
         });
 
-        it('opens HTML files with Markdown\'s four views, the Preview a sandboxed page', async () => {
+        it('opens HTML files with Markdown\'s four views, the Preview the page in the sandbox page, scripts included', async () => {
             setFilesSurfaceView('preview');
             const file = openFileFixture('docs/page.html', '<link rel="stylesheet" href="page.css"><p>Hi</p><script>window.ran = 1</script>');
             renderFilesSurface(container, stateFor([file], file, true, root), callbacks);
             await settleAsync();
-            const frame = container.querySelector<HTMLIFrameElement>('iframe.html-preview-frame');
+            const sandbox = drawSandboxPage(container);
 
             expect(viewTabLabels(container)).toEqual(['Editor', 'Interactive', 'Split', 'Preview']);
             expect(container.querySelector<HTMLElement>('.view-tab[data-view="interactive"]')?.title).toBe('Edit the page as a document; the file stays HTML');
             expect(badges(container)).toEqual(['HTML']);
-            expect(frame?.getAttribute('sandbox')).toBe('allow-same-origin');
-            expect(frame?.srcdoc).toContain('p { color: red; }');
-            expect(frame?.srcdoc).not.toContain('<script');
+            expect(sandbox.frame.getAttribute('src')).toBe('sandbox.html');
+            expect(sandbox.frame.getAttribute('sandbox')).toBe('allow-scripts allow-modals allow-forms');
+            expect(sandbox.page()).toContain('p { color: red; }');
+            expect(sandbox.page()).toContain('<script>window.ran = 1</script>');
             expect(buttonByText(container, 'Saved')).toBeDefined();
 
             container.querySelector<HTMLElement>('.view-tab[data-view="editor"]')?.click();
@@ -1148,7 +1150,7 @@ describe('renderFilesSurface', () => {
             renderFilesSurface(container, stateFor([page, sheet], page, true, root), callbacks);
             await settleAsync();
 
-            expect(container.querySelector<HTMLIFrameElement>('iframe.html-preview-frame')?.srcdoc).toContain('p { color: blue; }');
+            expect(drawSandboxPage(container).page()).toContain('p { color: blue; }');
 
             setFilesSurfaceView('preview');
             const saved = { ...sheet, dirty: false };
@@ -1156,7 +1158,7 @@ describe('renderFilesSurface', () => {
             renderFilesSurface(container, stateFor([page, saved, other], other, true, root), callbacks);
             await settleAsync();
 
-            expect(container.querySelector<HTMLIFrameElement>('iframe.html-preview-frame')?.srcdoc).toContain('p { color: red; }');
+            expect(drawSandboxPage(container).page()).toContain('p { color: red; }');
         });
 
         it('edits HTML in the Interactive view, with its workspace images and the HTML formatting bar', async () => {
@@ -1177,10 +1179,10 @@ describe('renderFilesSurface', () => {
             const file = openFileFixture('docs/split.html', '<p>one</p>');
             renderFilesSurface(container, stateFor([file], file, true, root), callbacks);
             await settleAsync();
-            const frame = container.querySelector<HTMLIFrameElement>('.split iframe.html-preview-frame');
+            const first = drawSandboxPage(container.querySelector('.split') ?? container);
 
             expect([...container.querySelectorAll('.split-pane-header')].map((header) => header.textContent)).toEqual(['Source', 'Preview']);
-            expect(frame?.srcdoc).toContain('one');
+            expect(first.page()).toContain('one');
 
             // The page is drawn again on a timer once typing pauses, so the clock is moved on rather than waited for.
             vi.useFakeTimers();
@@ -1188,12 +1190,15 @@ describe('renderFilesSurface', () => {
             await flushAsync();
 
             expect(callbacks.onChange).toHaveBeenCalledWith('docs/split.html', '<p>two</p>');
-            expect(frame?.srcdoc).toContain('one');
+            expect(container.querySelectorAll('.split iframe.html-preview-frame')).toHaveLength(1);
 
             await vi.advanceTimersByTimeAsync(TYPING_PAUSE_MS);
             await flushAsync();
+            const second = drawSandboxPage(container);
 
-            expect(frame?.srcdoc).toContain('two');
+            expect(second.frame).not.toBe(first.frame);
+            expect(second.page()).toContain('two');
+            expect([...container.querySelectorAll('.split iframe.html-preview-frame')]).toEqual([second.frame]);
         });
 
         it('keeps the HTML preview while the text stays, and draws it again as the text changes', async () => {
@@ -1201,22 +1206,25 @@ describe('renderFilesSurface', () => {
             const file = openFileFixture('docs/live.html', '<p>one</p>');
             renderFilesSurface(container, stateFor([file], file, true, root), callbacks);
             await settleAsync();
-            const frame = container.querySelector('iframe');
-            expect(frame?.srcdoc).toContain('one');
+            const host = container.querySelector('.html-preview-host');
+            const first = drawSandboxPage(container);
+            expect(first.page()).toContain('one');
 
             vi.useFakeTimers();
             const edited = { ...file, text: '<p>two</p>' };
             renderFilesSurface(container, stateFor([edited], edited, true, root), callbacks);
             await flushAsync();
 
-            expect(container.querySelector('iframe')).toBe(frame);
-            expect(frame?.srcdoc).toContain('one');
+            expect(container.querySelector('.html-preview-host')).toBe(host);
+            expect([...container.querySelectorAll('iframe')]).toEqual([first.frame]);
 
             await vi.advanceTimersByTimeAsync(TYPING_PAUSE_MS);
             await flushAsync();
+            const second = drawSandboxPage(container);
 
-            expect(container.querySelector('iframe')).toBe(frame);
-            expect(frame?.srcdoc).toContain('two');
+            expect(container.querySelector('.html-preview-host')).toBe(host);
+            expect(second.page()).toContain('two');
+            expect([...container.querySelectorAll('iframe')]).toEqual([second.frame]);
         });
 
         it('shows workspace images in the Markdown preview and hands workspace links to the app', async () => {

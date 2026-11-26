@@ -21,6 +21,6 @@ describe('extractRtfText', () => {
     });
 
     it('turns escaped symbols and cells into text', () => {
-        expect(extractRtfText('{\\rtf1 a\\{b\\}c\\\\d\\~e\\-f\\_g\\cell h\\row}')).toBe('a{b}c\\d ef‑g\th');
+        expect(extractRtfText('{\\rtf1 a\\{b\\}c\\\\d\\~e\\-f\\_g\\cell h\\row}')).toBe('a{b}c\\d\u00A0ef\u2011g\th');
     });
 });

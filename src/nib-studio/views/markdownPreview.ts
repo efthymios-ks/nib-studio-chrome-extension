@@ -61,7 +61,7 @@ export function mountMarkdownPreview(article: HTMLElement, options: MarkdownPrev
 
     return {
         render: (source) => {
-            const preview = renderMarkdown(source);
+            const preview = renderMarkdown(source, { hasCopyButtons: true });
             article.innerHTML = preview.html;
             titleWorkspaceLinks(article, options.documentPath);
             diagramsDrawn = Promise.all(preview.diagrams.map(async (diagram) => {

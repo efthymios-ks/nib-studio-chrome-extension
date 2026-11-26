@@ -1,12 +1,14 @@
+import { escapeHtml } from '../html/escapeHtml.js';
+
+// The colour of links and of a quote's bar on the page.
+const ACCENT = '#1f6feb';
+
 export interface HtmlExportOptions {
     readonly title: string;
     readonly bodyHtml: string;
-    readonly accentColor?: string;
 }
 
 export function buildStandaloneHtml(options: HtmlExportOptions): string {
-    const accent = options.accentColor ?? '#1f6feb';
-
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -27,7 +29,7 @@ export function buildStandaloneHtml(options: HtmlExportOptions): string {
         }
         h1, h2, h3 { color: #0f172a; }
         h1 { border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
-        a { color: ${accent}; }
+        a { color: ${ACCENT}; }
         code {
             background: #eef1f5;
             padding: 1px 6px;
@@ -44,13 +46,28 @@ export function buildStandaloneHtml(options: HtmlExportOptions): string {
         blockquote {
             margin: 0 0 10px;
             padding: 4px 12px;
-            border-left: 3px solid ${accent};
+            border-left: 3px solid ${ACCENT};
             color: #475569;
         }
         table { border-collapse: collapse; }
         th, td { border: 1px solid #cbd5e1; padding: 6px 10px; }
         th { background: #eef1f5; }
-        .md-mermaid svg { max-width: 100%; height: auto; }
+        .md-mermaid {
+            margin: 10px 0 16px;
+            text-align: center;
+            break-inside: avoid;
+        }
+        .md-mermaid img { background: #ffffff; }
+        .md-mermaid-error {
+            margin: 10px 0 16px;
+            padding: 12px;
+            font: 12px/1.5 "Cascadia Mono", Consolas, monospace;
+            white-space: pre-wrap;
+            color: #c72e0f;
+            background: #fde7e4;
+            border: 1px solid #c72e0f;
+            border-radius: 6px;
+        }
         img { max-width: 100%; height: auto; }
         kbd {
             padding: 1px 5px;
@@ -90,12 +107,4 @@ export function downloadFile(filename: string, content: string, type: string): v
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-}
-
-function escapeHtml(value: string): string {
-    return value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }

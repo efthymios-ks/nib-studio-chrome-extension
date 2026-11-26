@@ -49,16 +49,16 @@ const CONTROL_TEXT: ReadonlyMap<string, string> = new Map([
     ['rquote', '’'],
     ['ldblquote', '“'],
     ['rdblquote', '”'],
-    ['emspace', ' '],
-    ['enspace', ' '],
+    ['emspace', '\u2003'],
+    ['enspace', '\u2002'],
 ]);
 
 const CONTROL_SYMBOLS: ReadonlyMap<string, string> = new Map([
     ['\\', '\\'],
     ['{', '{'],
     ['}', '}'],
-    ['~', ' '],
-    ['_', '‑'],
+    ['~', '\u00A0'],
+    ['_', '\u2011'],
     ['-', ''],
 ]);
 

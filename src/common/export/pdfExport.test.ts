@@ -54,8 +54,8 @@ describe('printToPdfAsync', () => {
         await printToPdfAsync({ title: 'Report', bodyHtml: '<p>Body</p>' });
 
         const frame = findFrame() as FakeFrame;
-        expect(frame.style.position).toBe('fixed');
-        expect(frame.style.width).toBe('0px');
+        expect(frame.className).toBe('print-frame');
+        expect(frame.getAttribute('aria-hidden')).toBe('true');
         expect(frame.srcdoc).toContain('<title>Report</title>');
         expect(frame.srcdoc).toContain('<p>Body</p>');
         expect(printable.focus).toHaveBeenCalledTimes(1);

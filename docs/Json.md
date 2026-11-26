@@ -1,8 +1,11 @@
 # JSON
 
 A `.json` file opens with four view tabs: **Editor**, **Tree**, **JSONPath** and **Schema**,
-and a **Compare with…** button in the toolbar.  
-Every view reads the editor's current text, unsaved edits included.
+and **Copy raw**, **Copy formatted** and **Compare with…** buttons in the toolbar.  
+Every view reads the editor's current text, unsaved edits included.  
+In every view, **Copy raw** copies that text as it is, and **Copy formatted** copies the document with a 2-space indent;
+invalid JSON copies nothing from **Copy formatted**, and the toast says why.
+See [Copy](Editor.md#copy).
 
 ## Editor
 
@@ -20,9 +23,10 @@ with the error message, line and column.
 **Format JSON** in the Explorer or tab context menu reformats the file the same way, opening it first when needed,
 and an invalid file shows the same **Not valid JSON** toast, with the line and column.
 
-**Convert to YAML** in the toolbar, and **Convert JSON to YAML** in the Explorer or tab context menu,
+**Convert to YAML** in the Editor view's toolbar, and **Convert JSON to YAML** in the Explorer or tab context menu,
 open the document as YAML in a tab of its own, such as `data.json.converted.yaml`, which **Save** writes next to the JSON file;
-see [YAML](Yaml.md#convert-json-to-yaml).
+both show only for a file in the workspace.
+See [YAML](Yaml.md#convert-json-to-yaml).
 
 ## Tree
 

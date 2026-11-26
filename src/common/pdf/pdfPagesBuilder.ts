@@ -119,8 +119,7 @@ async function buildAsync(source: PDFDocument, pages: ReadonlyArray<number>, now
 }
 
 // Points every link at its target page's index rather than the page itself,
-// and lets go of what ties a page to
-// the others,
+// and lets go of what ties a page to the others,
 // so copying a page never brings the pages it links to along. Article beads and page actions are left out.
 function prepareLinks(source: PDFDocument): void {
     const pages = source.getPages();

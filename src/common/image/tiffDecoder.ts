@@ -1,8 +1,9 @@
 import UTIF from 'utif2';
+import { toArrayBuffer } from '../binary/bytes.js';
 import { orientPixels, type DecodedImage } from './decodedImage.js';
 
 // Decoded images above this many pixels are refused, so a huge scan can't exhaust memory; 120 MP is about 480 MB of RGBA.
-export const MAX_DECODED_PIXELS = 120_000_000;
+const MAX_DECODED_PIXELS = 120_000_000;
 
 export interface DecodedTiff extends DecodedImage {
     readonly pageCount: number;
@@ -71,16 +72,4 @@ function tagNumber(directory: TiffDirectory, tag: string): number | null {
     const first: unknown = Array.isArray(value) || ArrayBuffer.isView(value) ? (value as ArrayLike<unknown>)[0] : value;
 
     return typeof first === 'number' && Number.isFinite(first) ? first : null;
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-    if (
-        bytes.byteOffset === 0
-        && bytes.byteLength === bytes.buffer.byteLength
-        && bytes.buffer instanceof ArrayBuffer
-    ) {
-        return bytes.buffer;
-    }
-
-    return bytes.slice().buffer;
 }

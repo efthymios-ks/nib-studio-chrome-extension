@@ -36,13 +36,13 @@ Find anything
 Type in the Lookup box to find files by name or by what is inside them, Office documents and PDFs included, with a preview of each match.
 
 Edit
-A code editor with syntax colours, errors marked as you type, search and replace, multiple cursors, and an undo history that survives switching views. Markdown and HTML files also get an Interactive view that edits like a word processor, and a live preview with diagrams and pictures from your folder.
+A code editor with syntax colours, errors marked as you type, search and replace, multiple cursors, and an undo history that survives switching views. Markdown and HTML files also get an Interactive view that edits like a word processor, and a live preview with diagrams and pictures from your folder, where an HTML page runs its own scripts, sealed off from the network. Open what is on the clipboard in a tab of its own, and copy a document with its formatting, or a table as cells, ready to paste elsewhere.
 
 Compare
 Compare any two files, or a file with the clipboard or pasted text, side by side. Structured data is compared by its structure, Markdown as a document and spreadsheets row by row, with a bar to step through the changes and an export to share the result.
 
 Work with data
-Sort, filter and search spreadsheets, query them with a simple SQL-like language, and browse structured data as a tree, with path queries and schema validation.
+Sort, filter and search spreadsheets, move between the sheets of a workbook, query them with a simple SQL-like language, and browse structured data as a tree, with path queries and schema validation.
 
 Preview
 View PDFs, Word documents, images, audio, video and fonts, with smooth zoom and a details panel. PDFs add find, a page box, and saving chosen pages as a new PDF. Password-protected documents open once you enter their password.

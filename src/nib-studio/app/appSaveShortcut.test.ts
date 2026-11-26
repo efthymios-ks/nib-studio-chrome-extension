@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EditorView } from '@codemirror/view';
 import { textOf, type FakeFileHandle } from '../../common/fs/testing/fakeFileSystem.js';
+import { buildTinyXlsx } from '../../common/office/testing/encryptionFixtures.js';
 import { createAppHarness, openHarnessWorkspaceAsync, type AppHarness } from '../testing/appHarness.js';
 import { ignoreSelectionChange, settleAsync } from '../testing/testHelpers.js';
 import { setFilesSurfaceView } from '../views/filesSurface.js';
@@ -13,6 +14,8 @@ beforeEach(() => {
     harness = createAppHarness({
         'data.json': '{"name":"nib"}\n',
         'feed.xml': '<feed><item>1</item></feed>\n',
+        'users.csv': 'id,name\r\n1,Anna\r\n',
+        'sales.xlsx': buildTinyXlsx([['region', 'total'], ['North', 1250]]),
     });
 });
 
@@ -63,5 +66,20 @@ describe('Ctrl+S outside the editor', () => {
 
         expect(handle.writeCount).toBe(0);
         expect(harness.state().openFiles.find((file) => file.path === 'feed.xml')?.dirty).toBe(true);
+    });
+
+    it('writes nothing from a table, a CSV file or a workbook, which is view only', async () => {
+        await openHarnessWorkspaceAsync(harness);
+
+        for (const path of ['users.csv', 'sales.xlsx']) {
+            await harness.callAsync('openFileAsync', path);
+            const handle = harness.folder.find(path) as FakeFileHandle;
+
+            const event = pressSave();
+            await settleAsync();
+
+            expect(event.defaultPrevented).toBe(true);
+            expect(handle.writeCount).toBe(0);
+        }
     });
 });

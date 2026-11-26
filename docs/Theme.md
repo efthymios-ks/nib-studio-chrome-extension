@@ -16,7 +16,7 @@ the whole studio follows at once.
 ## Tokens
 
 Almost every colour in `styles.scss` comes from a CSS custom property.  
-Each palette defines the same 74 tokens under `:root[data-theme="light"]` or `:root[data-theme="dark"]`:
+Each palette defines the same 72 tokens under `:root[data-theme="light"]` or `:root[data-theme="dark"]`:
 
 | Group | Tokens |
 | --- | --- |
@@ -26,7 +26,7 @@ Each palette defines the same 74 tokens under `:root[data-theme="light"]` or `:r
 | Accent | `--accent`, `--accent-soft`, `--accent-text`, `--selection-bg` |
 | Status | `--ok`, `--warn`, `--fail`, `--info`, each with a `-soft` background |
 | Diff | `--diff-add-bg`, `--diff-add-text`, `--diff-del-bg`, `--diff-del-text`, `--diff-change-bg` |
-| File types | `--ft-json`, `--ft-xml`, `--ft-csv`, … `--ft-folder`, `--ft-unknown`, one per file type |
+| File types | `--ft-json`, `--ft-xml`, `--ft-csv`, … `--ft-folder`, `--ft-unknown`, one per file type the palette knows |
 | Syntax | `--syntax-keyword`, `--syntax-string`, `--syntax-number`, … `--syntax-attr-value` |
 | Shape | `--radius`, `--radius-small`, `--shadow`, `--shadow-strong` |
 | Mono aliases | `--mono-key`, `--mono-string`, `--mono-number`, `--mono-boolean` |
@@ -34,9 +34,10 @@ Each palette defines the same 74 tokens under `:root[data-theme="light"]` or `:r
 `styles.scss` sets a few colours directly, the same in both themes:
 the white text and the hover backgrounds of primary and danger buttons,
 and the dimmed backdrop behind dialogs and the narrow-screen Explorer drawer.  
-It also defines three tokens of its own per theme, which the shared palette has no counterpart for:
+It also defines five tokens of its own per theme, which the shared palette has no counterpart for:
 `--flash`, for the ring around the change the diff bar steps to,
-and `--checker-light` and `--checker-dark`, the squares of the checkerboard behind transparent images.  
+`--checker-light` and `--checker-dark`, the squares of the checkerboard behind transparent images,
+and `--ft-presentation` and `--ft-opendocument`, the icon colours of presentations and OpenDocument files.  
 The same rules set `color-scheme` to `light` or `dark`,
 so native scroll bars, form controls and the audio and video players follow the theme.
 
@@ -45,8 +46,10 @@ Not themed:
 - Syntax colours in the file editor, for JSON, YAML, Markdown and HTML, come from CodeMirror's default highlight style in both themes.
   The JSON and XML trees use the `--mono-*` tokens, and the table query editor the `--syntax-*` ones.
 - Mermaid diagrams use Mermaid's default theme in both modes, drawn on a white page so their lines read in dark too.
+- An HTML file's page, in **Preview** and **Split**, is light on white in both themes, unless its own styles say otherwise.
 - The Markdown diff page and the Markdown HTML and PDF exports carry their own light styles.
-- A diff's **Export HTML** page carries its own light and dark styles, and follows the system's setting rather than the studio's.
+- A diff's **Export HTML** page, but for a Markdown diff's, carries its own light and dark styles,
+  and follows the system's setting rather than the studio's.
 - Word and PDF pages stay white paper in both themes, with the colours a printed page would have,
   and so do the highlights of Find on a Word page.
 

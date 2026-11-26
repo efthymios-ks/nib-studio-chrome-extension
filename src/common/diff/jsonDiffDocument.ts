@@ -1,4 +1,5 @@
 import { JsonComparer, type JsonArrayRule, type JsonDifference } from '../json/jsonComparer.js';
+import { isPlainObject } from '../json/jsonTree.js';
 import { JsonPathBuilder, type JsonPathSegment } from '../paths/jsonPathBuilder.js';
 import {
     DIFF_DOCUMENT_FORMAT,
@@ -151,8 +152,4 @@ function valueAt(root: unknown, segments: ReadonlyArray<JsonPathSegment>): unkno
     }
 
     return current;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return value != null && typeof value === 'object' && !Array.isArray(value);
 }

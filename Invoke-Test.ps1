@@ -14,7 +14,7 @@
     Exit codes:
       0  all tests passed, or the tools are ready with -InstallOnly
       1  type errors, or one or more tests failed
-      2  no tests were discovered
+      2  a test path was not found
       3  Node.js is missing or too old and could not be installed, or npm ci failed
 
 .PARAMETER Path

@@ -1,3 +1,4 @@
+import { isPlainObject } from '../json/jsonTree.js';
 import { JsonPathBuilder, type JsonPathSegment } from './jsonPathBuilder.js';
 import type { XmlNode } from './xmlParser.js';
 
@@ -224,10 +225,6 @@ function listName(segments: ReadonlyArray<JsonPathSegment>): string {
 
 function firstKey(object: Record<string, unknown>, accept: (value: unknown, key: string) => boolean): string | null {
     return Object.keys(object).find((key) => accept(object[key], key)) ?? null;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function isPrimitive(value: unknown): boolean {

@@ -22,11 +22,15 @@ Images, audio and video open in a preview of their own; see [Preview](Preview.md
 
 ### Toolbar
 
-From left to right: the **Word** badge, `−`, the zoom level, `+`, **Reset**, **Info** and **View only**.  
+From left to right: the **Word** badge, `−`, the zoom level, `+`, **Reset**, **Copy formatted**, **Info** and **View only**.  
 **Find in document…** with `↑` and `↓` sits in a bar under the toolbar,
 which hides while the frame shows a message.
 It is the same box as the PDF preview's, `views/findBox.ts`, with the same keys and count.  
-There is no copy button: select text with the mouse and press `Ctrl+C`.
+**Copy formatted** shows once the page does and copies the document as shown,
+to paste with its headings, lists, tables and pictures; the toast says **Formatted document copied.**
+Pictures go in up to 10 MB in all, and one past that gives way to a line saying it was left out.
+There is no **Copy raw**, as a Word file has no text of its own; to copy part of the page, select it and press `Ctrl+C`.
+See [Copy](Editor.md#copy).
 
 ### Page
 
@@ -75,7 +79,7 @@ There is no copy button: select text with the mouse and press `Ctrl+C`.
   headings, paragraphs, lists, tables, bold, italics, underline, footnotes and endnotes.
 - Word's **Title**, **Subtitle**, **Quote**, **Intense Quote** and **Caption** styles show as such,
   and headings 7 to 9 as the smallest heading.
-- **Pictures:** PNG, JPEG, GIF, BMP, WebP and SVG pictures stored in the file show inline from `data:` URLs,
+- **Pictures:** PNG, JPEG, GIF, BMP, WebP, AVIF, SVG and ICO pictures stored in the file show inline from `data:` URLs,
   at the size the document gives them.
   Other kinds, such as EMF and WMF, and pictures linked from outside the file show a **Picture** placeholder.
 - **Tables:** header rows are shaded, and so is a first row set in bold.
@@ -136,7 +140,7 @@ There is no copy button: select text with the mouse and press `Ctrl+C`.
 
 - A `.docx` or `.doc` encrypted with a password asks for it in the frame, as a PDF does:
   **This document is protected with a password**, the file name, a password box, **Open** and **Cancel**.
-  The zoom and Find are hidden until it opens.
+  The zoom, **Copy formatted** and Find are hidden until it opens.
 - `Enter` opens, `Escape` cancels, and **Unlocking…** shows while the password is tried.
 - A wrong password says **That password is incorrect. Try again.**
 - **Cancel** leaves **It stays closed until its password is entered.**, with **Enter password** to ask again.
@@ -159,7 +163,7 @@ Each shows a message in the frame, and the **Info** panel still lists the file, 
   These are Information Rights Management, encryption for a certificate rather than a password,
   third-party (extensible) encryption, ciphers other than AES or RC4, AES-192, which the browser lacks,
   unknown versions, the XOR obfuscation of older Word versions, and Word 6.0 and Word 95 encryption.
-- Word for Windows 1.0 and 2.0 files: **This document uses an older Word format**, with the version it was saved by.
+- Word for Windows 1.0 and 2.0 files: **This document uses an older Word format**, saying it was saved by Word 2 or earlier.
 - An Excel workbook or a PowerPoint presentation with a Word name: **This file isn't a Word document**.
 - Word 2003 XML and flat XML: **This document is Word XML**.
 - An empty file: **This document is empty**.
@@ -271,7 +275,7 @@ It sits in the toolbar beside the page box, and in the Explorer's and the tab's 
   A file that takes the name in the meantime is never written over; the dialog says so instead.
 - **From outside the workspace:** for a PDF opened from outside the workspace the button reads **Save as…**,
   and a file picker asks where the new PDF goes; closing the picker leaves the dialog open.
-  The new PDF opens in a tab of its own, and the only toast is **Saved name.**
+  The new PDF opens in a tab of its own, and the only toast is the one that names it, such as **Saved tracemonkey-pages.pdf.**
 - **Closing:** `Escape`, **Cancel**, `×` or a click beside the dialog closes it without saving.
 - **The new PDF:** each page is a copy of the original page, a repeated page being a page of its own,
   and the pages share their fonts and pictures.

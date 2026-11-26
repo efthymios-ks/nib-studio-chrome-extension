@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bytesToHex } from '../encoding/hex.js';
-import { DIGEST_LENGTHS, HASH_ALGORITHMS, digestAllAsync, digestAsync, toArrayBuffer } from './hash.js';
+import { DIGEST_LENGTHS, HASH_ALGORITHMS, digestAllAsync, digestAsync } from './hash.js';
 
 describe('digestAsync', () => {
     const ABC = new TextEncoder().encode('abc');
@@ -37,19 +37,5 @@ describe('digestAllAsync', () => {
         for (const algorithm of HASH_ALGORITHMS) {
             expect(digests.get(algorithm)?.length).toBe(DIGEST_LENGTHS[algorithm]);
         }
-    });
-});
-
-describe('toArrayBuffer', () => {
-    it('reuses a buffer the bytes fill', () => {
-        const bytes = new Uint8Array([1, 2, 3]);
-
-        expect(toArrayBuffer(bytes)).toBe(bytes.buffer);
-    });
-
-    it('copies just the viewed bytes otherwise', () => {
-        const bytes = new Uint8Array([1, 2, 3, 4]).subarray(1, 3);
-
-        expect([...new Uint8Array(toArrayBuffer(bytes))]).toEqual([2, 3]);
     });
 });

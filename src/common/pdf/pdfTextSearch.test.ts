@@ -59,7 +59,7 @@ describe('searchablePage', () => {
     });
 
     it('runs white space together and drops it at the start of the page', () => {
-        expect(searchablePage(items('  one', '  two  ', line(''), 'three')).folded).toBe('one two three');
+        expect(searchablePage(items('  one', '\u00A0 two  ', line(''), 'three')).folded).toBe('one two three');
     });
 
     it('gives each half of a character outside the basic plane the same source', () => {

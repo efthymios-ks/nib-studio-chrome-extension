@@ -102,7 +102,7 @@ describe('readDocFile text', () => {
         expect(paragraph.inlines.map((inline) => (inline.kind === 'text' ? inline.text : `[${inline.kind}]`))).toEqual([
             'One',
             '[line-break]',
-            'two‑threefour',
+            'two\u2011threefour',
             '[picture]',
             'five',
             '[picture]',

@@ -6,7 +6,7 @@ The zip goes to the [Developer Dashboard](https://chrome.google.com/webstore/dev
 
 ## Build
 
-`scripts/build.mjs` makes one build, which runs unpacked from `dist` and goes into the store zip as it is:
+`scripts/build.mjs` makes one build, which runs unpacked from `dist` and goes into the store zip as it is, minus its source maps:
 `npm run build`, `npm run watch` or `node scripts/build.mjs`.  
 `node scripts/build.mjs --outdir <folder>` builds into another folder instead of `dist`, such as a scratch folder for a check.  
 It ships no HEIC decoder: HEIC pictures are HEVC, and HEVC is covered by patent pools,
@@ -62,6 +62,7 @@ The script:
 7. Verifies the zip: `manifest.json` at the root with the right version, no `.map` files, and these files present:
    `THIRD_PARTY_NOTICES.txt` at the root; `background.js`, `nib-studio/index.html`, `nib-studio/main.js` and `nib-studio/styles.css`;
    the image decode worker `nib-studio/imageDecodeWorker.js` and the Lookup worker `nib-studio/lookupWorker.js`;
+   the HTML preview's sandbox page `nib-studio/sandbox.html` and its script `nib-studio/sandbox.js`;
    and pdf.js's `nib-studio/pdfjs/pdf.worker.min.mjs`, its JBIG2 and JPEG 2000 decoders under `nib-studio/pdfjs/wasm/`,
    and its `LICENSE`.
    It warns when the manifest has no icons.
@@ -151,7 +152,8 @@ The store listing needs the 128 px one.
 Every build, watch builds included, collects the notices of everything it ships before it bundles,
 with `scripts/collect-licenses.mjs`:
 
-- **Bundled packages:** esbuild bundles `background`, `nib-studio/main`, the image decode worker and the Lookup worker once without writing anything,
+- **Bundled packages:** esbuild bundles `background`, `nib-studio/main`, the image decode worker,
+  the Lookup worker and the sandbox page's script once without writing anything,
   and its metafiles name every file it took from `node_modules`.
   Each package folder among them is listed, a nested copy as its own entry,
   so both DOMPurify copies are there: ours and the one inside mermaid.

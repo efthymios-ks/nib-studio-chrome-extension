@@ -54,6 +54,11 @@ export const JSON_DATA_FORMAT: DataFormat = Object.freeze({
     parse: parseJson,
 });
 
+// Whether a parsed value is an object, not an array or null.
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
 // The tree of a value that is already parsed, rooted at `$`.
 export function jsonTreeOf(value: unknown): JsonNode {
     return buildNode('$', null, value);

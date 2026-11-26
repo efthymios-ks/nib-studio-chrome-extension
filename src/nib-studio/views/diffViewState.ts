@@ -84,6 +84,9 @@ export interface MarkdownDiffViewState {
 export interface LoadedRowSet {
     readonly path: string;
     readonly rowSet: RowSet;
+    // A workbook's sheets in order, and the one its rows come from; absent for a CSV or TSV file.
+    readonly sheets?: ReadonlyArray<{ readonly name: string; readonly hidden: boolean }>;
+    readonly sheet?: string;
 }
 
 export interface RowDiffViewState {
@@ -98,8 +101,11 @@ export interface RowDiffViewState {
     activeDiffKey: string | null;
     navigation: DiffNavigationState;
     scroll: ScrollMemory;
-    // Parsed sides, keyed by the text or File they came from.
-    loaded: Partial<Record<DiffSideName, { source: string | File; rowSet: LoadedRowSet | null }>>;
+    // The sheet picked on each side of a workbook compare; a side without one takes the sheet of the same name
+    // as the original's, the sheet its table tab shows, or its first sheet.
+    sheets: Partial<Record<DiffSideName, string>>;
+    // Parsed sides, keyed by the text or File they came from and the sheets asked for.
+    loaded: Partial<Record<DiffSideName, { source: string | File; request: string; rowSet: LoadedRowSet | null }>>;
     // The diff document, kept until a side, the key or sort columns or the column order change.
     cache: {
         original: LoadedRowSet;
@@ -200,6 +206,7 @@ export function createRowDiffViewState(): RowDiffViewState {
         activeDiffKey: null,
         navigation: createDiffNavigationState(),
         scroll: {},
+        sheets: {},
         loaded: {},
         cache: null,
     };
@@ -235,4 +242,9 @@ export function swapSideMemory(state: DiffViewState): void {
 
     const loaded = state.rows.loaded;
     state.rows.loaded = { original: loaded.modified, modified: loaded.original };
+    const sheets = state.rows.sheets;
+    state.rows.sheets = {
+        ...(sheets.modified == null ? {} : { original: sheets.modified }),
+        ...(sheets.original == null ? {} : { modified: sheets.original }),
+    };
 }

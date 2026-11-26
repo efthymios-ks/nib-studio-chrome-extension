@@ -112,6 +112,18 @@ describe('diff exports', () => {
         expect(await downloads[2]!.blob.text()).toContain('<title>a.md ↔ b.md &mdash; diff</title>');
     });
 
+    it('exports a Markdown diff\'s code blocks without the preview\'s Copy buttons', async () => {
+        const original = '# A\n\n```js\nkept();\n```\n\n```js\nrun();\n```\n';
+        const modified = '# A\n\n```js\nkept();\n```\n\n```js\nrunAgain();\n```\n';
+
+        await exportDiffTabAsync(tabOf('markdown', original, modified, 'md'), 'html');
+        const html = await downloads[0]!.blob.text();
+
+        expect(html).toContain('<span class="md-l">kept();</span>');
+        expect(html).toContain('runAgain();');
+        expect(html).not.toMatch(/md-code-copy|md-code-wrap|data-code|Copy code/);
+    });
+
     it('names the files after pasted sides too', async () => {
         const tab = createDiffTab({ label: 'Pasted text', source: 'paste', text: 'a', pastedAt: 1 }, { label: 'Clipboard', source: 'clipboard', text: 'b' }, 'text');
 

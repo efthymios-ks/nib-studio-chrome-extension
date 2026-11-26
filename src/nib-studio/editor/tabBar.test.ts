@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDiffTab } from '../app/diffTabs.js';
-import type { OpenTab } from '../app/store.js';
+import { externalTabPath, type OpenTab } from '../app/store.js';
 import { DIFF_TAB_GLYPH, renderTabBar, type TabBarCallbacks } from './tabBar.js';
 import { openFileFixture } from '../testing/testHelpers.js';
 
@@ -41,6 +41,22 @@ describe('renderTabBar', () => {
         expect(preview?.dataset['active']).toBe('true');
         expect(preview?.dataset['preview']).toBe('true');
         expect(preview?.dataset['dirty']).toBeUndefined();
+    });
+
+    it('marks a pasted tab and says Save asks where, without the arrow of a file from outside the workspace', () => {
+        const container = document.createElement('div');
+        const pasted = openFileFixture(externalTabPath(2, 'Clipboard.json'), '{}', {
+            dirty: true,
+            external: { handle: null, pasted: true },
+        });
+        renderTabBar(container, [pasted], null, callbacks());
+        const [tab] = tabs(container);
+
+        expect(tab?.dataset['pasted']).toBe('true');
+        expect(tab?.dataset['external']).toBeUndefined();
+        expect(tab?.querySelector('.tab-external')).toBeNull();
+        expect(tab?.querySelector('.tab-name')?.textContent).toBe('Clipboard.json');
+        expect(tab?.title).toBe('Clipboard.json, pasted from the clipboard. Save asks where to save it.');
     });
 
     it('renders diff tabs with the compare glyph and kind', () => {
@@ -116,7 +132,8 @@ describe('renderTabBar', () => {
         const button = container.querySelector<HTMLButtonElement>('.tab-new');
 
         expect(button?.dataset['action']).toBe('new-compare');
-        expect(button?.getAttribute('aria-label')).toBe('New compare');
+        expect(button?.getAttribute('aria-label')).toBe('New tab');
+        expect(button?.title).toBe('New tab');
         expect(container.lastElementChild).toBe(button);
 
         button?.click();

@@ -6,6 +6,7 @@ import type { AppState, OpenFile } from './store.js';
 import { ABOUT_TITLE, showAboutDialog } from './aboutDialog.js';
 import { diffTabTitle } from './diffTabs.js';
 import { clear, h } from './dom.js';
+import { sheetLabelOf } from '../views/tableViewer.js';
 import { holdsNoText } from '../views/viewerKinds.js';
 import { textEncodingLabel } from '../../common/text/textEncoding.js';
 
@@ -34,10 +35,13 @@ export function renderStatusBar(container: HTMLElement, state: AppState): void {
     const dirtyCount = state.openFiles.filter((file) => file.dirty).length;
     const fileText = activeDiff != null ? diffTabTitle(activeDiff) : active == null ? '—' : basename(active.path);
     const languageText = activeDiff != null ? 'Compare' : active == null ? '' : languageLabel(active.path, active.binary === true);
+    // The sheet a workbook of several sheets shows, such as `Sheet 2 of 3 · Q2`.
+    const sheetText = activeDiff == null && active != null ? sheetLabelOf(active.path) : null;
 
     container.append(
         h('span', { class: 'status-item status-item-file', text: fileText }),
         h('span', { class: 'status-item status-item-secondary', text: languageText }),
+        ...(sheetText == null ? [] : [h('span', { class: 'status-item status-item-secondary', text: sheetText })]),
         ...(active != null && isReadAsText(active)
             ? [h('span', { class: 'status-item status-item-secondary', text: textEncodingLabel(active.encoding ?? 'utf-8') })]
             : []),

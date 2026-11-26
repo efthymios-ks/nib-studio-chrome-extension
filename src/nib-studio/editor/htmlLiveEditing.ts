@@ -26,8 +26,7 @@ import { clusterAfter, clusterBefore, rangeAround, skipRanges, subtractSpans } f
 import { asUndoStep, changesKeepingCaret } from './liveTransactions.js';
 
 // Marks an edit the Interactive view made itself, with its tags placed on purpose,
-// so the tag guard lets it through
-// and its caret stays exactly where it was put.
+// so the tag guard lets it through and its caret stays exactly where it was put.
 export const structuralEdit = Annotation.define<boolean>();
 
 // User edits whose deletions may not take tags with them; undo,

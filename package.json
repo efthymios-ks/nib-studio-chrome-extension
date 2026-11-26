@@ -1,6 +1,6 @@
 {
   "name": "nib-studio",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Open a folder on your computer to edit, compare, search and preview its files in a browser tab. Works offline; nothing is uploaded.",
   "author": "Efthymios Koktsidis <efthymios.ks@gmail.com>",

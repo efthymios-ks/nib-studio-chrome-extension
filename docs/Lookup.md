@@ -18,6 +18,8 @@ It reads text, Word, Excel, PowerPoint, OpenDocument and PDF files, on your devi
 - The line at the bottom of the panel counts the matches, such as `3 matches`,
   and says `Reading contents… 120 of 480` while the files' contents are still being read;
   the list fills in as they arrive.
+  The line also recalls the keys, `Enter opens · Ctrl+E reveals · Esc clears`.
+- With nothing found, the list reads `No matches`.
 
 ## Keys
 
@@ -74,6 +76,8 @@ Each file is tried against these rules in order, and the first that matches plac
   `…` marks text cut off at either end.
 - For a text file, such as plain text, code, Markdown, HTML, CSV or JSON, the preview also says the line of the first match,
   such as `Line 12`.
+- For a workbook, it says the sheet and the row of the first match, numbered as Excel numbers the sheet's rows,
+  so a header on the first row is row 1, such as `Q2 · row 14`.
 
 ## Opening a file
 
@@ -82,7 +86,8 @@ Each file is tried against these rules in order, and the first that matches plac
   with the first match selected, scrolled into view and the editor focused.
 - A match in a Word document or a PDF puts the first match's text into **Find in document…** and steps to it;
   see [Documents](Documents.md#find).
-- A match in the name, or in a file with no Editor, such as a workbook or a presentation,
+- A match in the content of a workbook opens its table on the sheet of the first match.
+- A match in the name, or in a file with no Editor, such as a CSV file or a presentation,
   opens the file as a click in the tree would, in its usual view.
 - `Ctrl+E` reveals the file in the Explorer instead: its folders open, its row is selected and the tree takes the keyboard.
 
@@ -96,7 +101,7 @@ The contents are read with the studio's own readers.
 | HTML: `html`, `htm`, `xhtml` | the text without its tags, scripts, styles and comments |
 | Word: `docx`, `docm`, `dotx`, `dotm` | the body, headers, footers, footnotes and endnotes, without field codes or deleted text |
 | Word 97–2003: `doc` | the text of its paragraphs and tables |
-| Workbooks: `xlsx`, `xls`, `xlsm`, `xlsb`, `xltx`, `xltm`, `ods` | every sheet, row by row, so a match reads with its row |
+| Workbooks: `xlsx`, `xls`, `xlsm`, `xlsb`, `xltx`, `xltm`, `ods` | every visible sheet, row by row, so a match reads with its row and names its sheet; hidden sheets are left out |
 | Presentations: `pptx`, `pptm`, `ppsx`, `ppsm`, `potx`, `potm` | the slides in order, then their notes |
 | OpenDocument: `odt`, `odp`, `odg` | the document's content |
 | PDF | the text of every page, as **Find in document…** reads it |

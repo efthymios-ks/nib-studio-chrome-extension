@@ -15,18 +15,18 @@ export const ZOOM_MIN = 0.1;
 export const ZOOM_MAX = 8;
 
 // The stops the buttons and keys move between.
-export const ZOOM_STEPS: ReadonlyArray<number> = [0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 6, 8];
+const ZOOM_STEPS: ReadonlyArray<number> = [0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 6, 8];
 
 // The space kept around the content, so its edges never touch the frame.
 export const CONTENT_PADDING = 16;
 
 // The natural log of the zoom factor per pixel of wheel travel. A trackpad pinch arrives as Ctrl+wheel with
 // deltaY = 100 × ln(scale), so this rate follows the fingers exactly.
-export const WHEEL_ZOOM_RATE = 0.01;
+const WHEEL_ZOOM_RATE = 0.01;
 
 // Each wheel event counts for at most this many pixels, so one mouse-wheel notch (about 100 pixels) zooms by about 22%
 // rather than jumping, while the small deltas of a pinch or a smooth wheel pass through unchanged.
-export const WHEEL_DELTA_CAP = 20;
+const WHEEL_DELTA_CAP = 20;
 
 const LINE_HEIGHT_PIXELS = 16;
 

@@ -76,3 +76,55 @@ describe('styles.scss diagrams', () => {
         expect(themed).toEqual([]);
     });
 });
+
+// The rules inside every `@media` block of this query, in the compiled CSS.
+function mediaRules(query: string): CssRule[] {
+    const css = sass.compile(STYLES_PATH, { style: 'expanded' }).css;
+    const rules: CssRule[] = [];
+    let start = css.indexOf(`@media ${query} {`);
+
+    while (start >= 0) {
+        const open = css.indexOf('{', start);
+        let depth = 1;
+        let end = open + 1;
+
+        while (depth > 0 && end < css.length) {
+            depth += css.charAt(end) === '{' ? 1 : css.charAt(end) === '}' ? -1 : 0;
+            end += 1;
+        }
+
+        for (const match of css.slice(open + 1, end - 1).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+            const declarations = new Map((match[2] ?? '').split(';')
+                .map((declaration) => declaration.split(':').map((part) => part.trim()))
+                .filter((parts): parts is [string, string] => parts.length === 2 && parts[0] !== '')
+                .map(([name, value]) => [name, value] as const));
+            rules.push({ selectors: (match[1] ?? '').split(',').map((selector) => selector.trim()), declarations });
+        }
+
+        start = css.indexOf(`@media ${query} {`, end);
+    }
+
+    return rules;
+}
+
+function displayOf(rules: ReadonlyArray<CssRule>, selector: string): string[] {
+    return rules
+        .filter((rule) => rule.selectors.includes(selector))
+        .map((rule) => rule.declarations.get('display'))
+        .filter((value): value is string => value != null);
+}
+
+describe('styles.scss copy buttons', () => {
+    const narrow = mediaRules('(max-width: 720px)');
+    const all = compileRules();
+
+    it('shows Copy raw and Copy formatted on a wide window, with the Copy menu button hidden', () => {
+        expect(displayOf(all, '.copy-buttons')).toContain('inline-flex');
+        expect(displayOf(all, '.copy-menu-button')).toContain('none');
+    });
+
+    it('folds them into the one Copy menu button at 720 px and narrower', () => {
+        expect(displayOf(narrow, '.copy-buttons')).toEqual(['none']);
+        expect(displayOf(narrow, '.copy-menu-button')).toEqual(['inline-block']);
+    });
+});

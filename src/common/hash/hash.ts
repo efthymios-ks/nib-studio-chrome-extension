@@ -1,3 +1,4 @@
+import { toArrayBuffer } from '../binary/bytes.js';
 import { Md5 } from './md5.js';
 
 export type HashAlgorithm = 'MD5' | 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512';
@@ -28,13 +29,4 @@ export async function digestAllAsync(bytes: Uint8Array): Promise<Map<HashAlgorit
     const digests = await Promise.all(HASH_ALGORITHMS.map(async (algorithm) => [algorithm, await digestAsync(bytes, algorithm)] as const));
 
     return new Map(digests);
-}
-
-// The bytes as an ArrayBuffer for Web Crypto, without a copy when they already fill one.
-export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-    if (bytes.buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
-        return bytes.buffer;
-    }
-
-    return bytes.slice().buffer as ArrayBuffer;
 }

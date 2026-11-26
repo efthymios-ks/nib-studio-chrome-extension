@@ -17,7 +17,7 @@ export interface MarkdownHtmlOptions {
 export const MARKDOWN_IMAGE_PLACEHOLDER_CLASS = 'md-image-blocked';
 
 // The renderer's own heading ids travel in this attribute,
-// past the sanitizer's guard against ids such as `title`.
+// past the sanitiser's guard against ids such as `title`.
 export const HEADING_ID_ATTRIBUTE = 'data-heading-id';
 
 // What the renderer writes, and the HTML READMEs use, much as GitHub allows it.
@@ -39,12 +39,12 @@ const MARKDOWN_ATTRIBUTES = Object.freeze([
     'data-code', 'data-mermaid-id', HEADING_ID_ATTRIBUTE,
 ]);
 
-// Classes the renderer gives code blocks and diagrams; raw HTML can't borrow the studio's own classes.
+// Classes the renderer gives code blocks and diagrams; every other class goes, so raw HTML can't borrow the rest of the studio's.
 const RENDERER_CLASSES = new Set(['md-code-wrap', 'md-code', 'md-code-copy', 'md-mermaid']);
 const LANGUAGE_CLASS = /^language-[\w#+.-]+$/;
 const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
 
-// Sanitizes rendered Markdown, raw HTML included: no scripts, handlers, styles, frames, objects, forms or
+// Sanitises rendered Markdown, raw HTML included: no scripts, handlers, styles, frames, objects, forms or
 // `javascript:` addresses. Web images become placeholders unless kept, and images read from the workspace
 // carry their address in `data-local-src` until the page reads them.
 export function sanitizeMarkdownHtml(html: string, options: MarkdownHtmlOptions): string {

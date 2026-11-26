@@ -53,10 +53,9 @@ function formatting(spec: TransactionSpec): TransactionSpec {
 }
 
 // Bold or italic: removes the format when the selection is in an element that has it, as `<strong>` or `<b>`,
-// and otherwise wraps the selection, or the word at the caret, in its tag; with neither,
-// it adds an empty pair
-// with the caret between,
-// for the next text typed. Null when the selection starts and ends in different elements.
+// and otherwise wraps the selection, or the word at the caret, in its tag;
+// with neither, it adds an empty pair with the caret between, for the next text typed.
+// Null when the selection starts and ends in different elements.
 function toggleInlineFormat(state: EditorState, format: InlineFormat): TransactionSpec | null {
     const range = state.selection.main;
     const around = enclosingElementNamed(state, range.from, format.names);

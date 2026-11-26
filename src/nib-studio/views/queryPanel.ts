@@ -2,24 +2,73 @@ import type { EditorState } from '@codemirror/state';
 import { isAbortError } from '../../common/csv/csvLimits.js';
 import { isLinqError } from '../../common/linq/linqErrors.js';
 import { compileQuery, runQueryAsync, type LinqProgress, type LinqResult } from '../../common/linq/linqEvaluator.js';
-import { LINQ_REFERENCE, buildExampleQueries, type LinqExampleQuery } from '../../common/linq/linqReference.js';
+import { parseQuery } from '../../common/linq/linqParser.js';
+import {
+    LINQ_REFERENCE,
+    buildExampleQueries,
+    buildSheetSourceReference,
+    type LinqExampleQuery,
+    type LinqReferenceSection,
+} from '../../common/linq/linqReference.js';
+import { querySourceFor, resolveQuerySheet, sheetNamedIn } from '../../common/linq/linqSheets.js';
 import type { LinqTableSource } from '../../common/linq/linqSources.js';
 import { formatValue, type LinqValue } from '../../common/linq/linqValues.js';
+import { copyTextWithToastAsync } from '../app/clipboard.js';
 import { clear, h } from '../app/dom.js';
 import { errorMessage } from '../../common/errorMessage.js';
-import { mountQueryEditor, type QueryEditorHandle, type QueryEditorHandlers } from './queryEditor.js';
-import { renderTableView, type TableColumn } from './tableView.js';
+import {
+    mountQueryEditor,
+    queryPlaceholder,
+    type QueryCompletions,
+    type QueryEditorHandle,
+    type QueryEditorHandlers,
+} from './queryEditor.js';
+import { createSheetTabs } from './sheetTabs.js';
+import { registerShownTable } from './shownTable.js';
+import { renderTableView, type TableColumn, type TableViewMemory } from './tableView.js';
 
-export interface QueryTableData {
-    // Identifies the file, for its query history.
-    readonly key: string;
+// One table a query can read: the one table of a CSV or TSV file, or one sheet of a workbook.
+export interface QueryTable {
+    // The sheet's name; null for the table of a CSV or TSV file, which has no sheets.
+    readonly name: string | null;
+    readonly hidden?: boolean;
     readonly columns: ReadonlyArray<string>;
     // Resolves to the rows to query once they can be read; reports waits like indexing.
     readonly loadSourceAsync: (report: (status: string) => void, signal: AbortSignal) => Promise<LinqTableSource>;
     // A few leading rows, used to type the columns for the examples.
     readonly loadSampleRowsAsync: () => Promise<ReadonlyArray<ReadonlyArray<unknown>>>;
-    // Renders the full table; a returned handle is destroyed before a query result replaces it.
-    readonly renderTable: (host: HTMLElement, toolbarExtras: () => ReadonlyArray<HTMLElement>) => { readonly destroy: () => void } | void;
+    // Renders the full table; a returned handle is destroyed before a query result or another sheet replaces it.
+    readonly renderTable: (host: HTMLElement, chrome: TableChrome) => { readonly destroy: () => void } | void;
+}
+
+// What the workspace puts into each table it shows: the Query toggle for the toolbar, and the sheet tabs.
+export interface TableChrome {
+    readonly toolbarExtras: () => ReadonlyArray<HTMLElement>;
+    // The sheet tabs of a workbook with more than one sheet, between the rows and the status line; null otherwise.
+    readonly footer: HTMLElement | null;
+}
+
+// The sheet a workbook shows and the hidden sheets shown as tabs, which the caller keeps per tab.
+export interface SheetMemory {
+    activeSheet?: string;
+    shownSheets?: string[];
+}
+
+export interface QueryTableData {
+    // Identifies the file, for its query history.
+    readonly key: string;
+    // The file's one table, or a workbook's sheets in workbook order.
+    readonly tables: ReadonlyArray<QueryTable>;
+    readonly sheetMemory?: SheetMemory;
+    // Told which sheet shows, such as `Sheet 2 of 3 · Q2`, whenever that changes; null for a file of one table.
+    readonly onSheetChange?: (label: string | null) => void;
+}
+
+// A workspace on screen, for showing one of its sheets from outside, as opening a Lookup match does.
+export interface TableWorkspaceHandle {
+    // Shows the sheet of this name, ignoring case; false when the file has no such sheet.
+    readonly showSheet: (name: string) => boolean;
+    readonly isConnected: () => boolean;
 }
 
 interface QueryLayout {
@@ -41,13 +90,29 @@ interface QuerySession {
     editor: QueryEditorHandle | null;
     controller: AbortController | null;
     status: string;
-    result: LinqResult | null;
+    // The result each sheet shows, by sheet name; '' stands for the table of a CSV or TSV file.
+    readonly applied: Map<string, LinqResult>;
+    // What each sheet's result table keeps while it shows, such as its sort; a new result starts afresh.
+    readonly resultMemories: Map<string, TableViewMemory>;
+    // The result of the last run and the sheet it read, for the line under Run.
+    lastRun: { readonly sheet: string; readonly result: LinqResult } | null;
     error: QueryError | null;
     elapsedMs: number;
     helpOpen: boolean;
-    // Bumped whenever the result or error changes, so progress alone redraws only the status.
+    // Bumped whenever a result or the error changes, so progress alone redraws only the status.
     version: number;
     readonly listeners: Set<() => void>;
+    // Lets the panel on screen follow the sheet shown, for its examples and sample query.
+    onSheetShown: (() => void) | null;
+}
+
+// What the panel needs of the workspace it sits in.
+interface WorkspaceLink {
+    readonly data: QueryTableData;
+    // The table on screen.
+    readonly activeTable: () => QueryTable;
+    // Shows the table at this index, as after a query on it.
+    readonly showTable: (index: number) => void;
 }
 
 const LAYOUT_KEY = 'nib-studio/query-panel';
@@ -64,9 +129,27 @@ const ALIGN_SAMPLE_ROWS = 1000;
 const sessions = new Map<string, QuerySession>();
 const workspaceToggles = new WeakMap<HTMLElement, () => void>();
 
-// Lays out the table with the query panel to its right, and the Query toggle in the table toolbar.
-// While a query result is applied, the main table shows it in place of the file's rows.
-export function renderTableWorkspace(container: HTMLElement, data: QueryTableData): void {
+// The keys that move to the next or previous sheet while the table has the focus: Ctrl+PageDown and Ctrl+PageUp,
+// as in Excel, and the same with Shift, as in Google Sheets, since a normal Chrome window keeps Ctrl+PageDown
+// and Ctrl+PageUp for its own tabs.
+const SHEET_KEYS: ReadonlyArray<{ readonly key: string; readonly step: number }> = [
+    { key: 'PageDown', step: 1 },
+    { key: 'PageUp', step: -1 },
+];
+
+// The sheet names a query can name: none for a CSV or TSV file, every sheet in order for a workbook.
+function sheetNamesOf(data: QueryTableData): string[] {
+    return data.tables.flatMap((table) => (table.name == null ? [] : [table.name]));
+}
+
+function tableKeyOf(table: QueryTable): string {
+    return table.name ?? '';
+}
+
+// Lays out the table with the query panel to its right, the Query toggle in the table toolbar,
+// and, for a workbook of several sheets, the sheet tabs under the rows.
+// While a query result is applied to a sheet, that sheet shows it in place of its rows.
+export function renderTableWorkspace(container: HTMLElement, data: QueryTableData): TableWorkspaceHandle {
     const layout = readLayout();
     const workspace = h('div', { class: 'table-workspace' });
     const indicator = h('div', { class: 'query-applied', attrs: { role: 'status' } });
@@ -84,6 +167,8 @@ export function renderTableWorkspace(container: HTMLElement, data: QueryTableDat
     container.append(workspace);
 
     const session = sessionFor(data.key);
+    const memory = data.sheetMemory ?? {};
+    const tables = data.tables;
     const toolbarExtras = (): ReadonlyArray<HTMLElement> => [h('button', {
         class: 'button table-query-toggle',
         text: 'Query',
@@ -92,31 +177,143 @@ export function renderTableWorkspace(container: HTMLElement, data: QueryTableDat
         on: { click: () => workspaceToggles.get(workspace)?.() },
     })];
 
-    // Undefined until the first render, then the result on screen, or null for the full table.
-    let shown: LinqResult | null | undefined;
-    let handle: { readonly destroy: () => void } | void;
-    const renderMain = (): void => {
-        const result = workspace.dataset['queryOpen'] === 'true' ? session.result : null;
+    // The hidden sheets shown as tabs, and the sheet on screen, as the tab remembers them,
+    // while those sheets still exist.
+    const shownHidden = (): Set<number> => new Set((memory.shownSheets ?? [])
+        .map((name) => tables.findIndex((table) => table.hidden === true && table.name === name))
+        .filter((index) => index >= 0));
+    const isOnStrip = (index: number): boolean => tables[index]?.hidden !== true || shownHidden().has(index);
+    const stripIndexes = (): number[] => tables.flatMap((_, index) => (isOnStrip(index) ? [index] : []));
+    const activeIndex = (): number => {
+        const remembered = tables.findIndex((table) => table.name != null && table.name === memory.activeSheet);
 
-        if (result === shown) {
+        if (remembered >= 0 && isOnStrip(remembered)) {
+            return remembered;
+        }
+
+        return Math.max(0, tables.findIndex((table) => table.hidden !== true));
+    };
+
+    const sheetLabel = (index: number): string | null => {
+        const name = tables[index]?.name;
+
+        if (tables.length < 2 || name == null) {
+            return null;
+        }
+
+        const strip = stripIndexes();
+
+        return `Sheet ${strip.indexOf(index) + 1} of ${strip.length} · ${name}`;
+    };
+
+    const tabs = tables.length > 1
+        ? createSheetTabs({
+            sheets: tables.map((table) => ({ name: table.name ?? '', hidden: table.hidden === true })),
+            onSelect: (index) => showTable(index),
+            onToggleHidden: (index) => toggleHidden(index),
+        })
+        : null;
+    const chrome: TableChrome = { toolbarExtras, footer: tabs?.element ?? null };
+
+    // Undefined until the first render, then what is on screen: the sheet, and its result or null for its rows.
+    let shown: { readonly index: number; readonly result: LinqResult | null } | undefined;
+    let handle: { readonly destroy: () => void } | void;
+    let announced: string | null | undefined;
+    const renderMain = (): void => {
+        const index = activeIndex();
+        const table = tables[index] as QueryTable;
+        const key = tableKeyOf(table);
+        const result = workspace.dataset['queryOpen'] === 'true' ? session.applied.get(key) ?? null : null;
+        tabs?.update(index, shownHidden());
+        const label = sheetLabel(index);
+
+        if (label !== announced) {
+            announced = label;
+            data.onSheetChange?.(label);
+        }
+
+        if (shown != null && shown.index === index && shown.result === result) {
             return;
         }
 
-        shown = result;
+        shown = { index, result };
         handle?.destroy();
         handle = undefined;
         clear(tableHost);
 
         if (result == null) {
             renderIndicator(indicator, null, () => undefined);
-            handle = data.renderTable(tableHost, toolbarExtras);
+            handle = table.renderTable(tableHost, chrome);
 
             return;
         }
 
-        renderIndicator(indicator, result, () => clearResult(session));
-        handle = renderQueryResult(tableHost, result, toolbarExtras);
+        renderIndicator(indicator, result, () => clearApplied(session, key));
+        handle = renderQueryResult(tableHost, result, chrome, resultMemoryOf(session, key));
     };
+
+    // Shows the sheet at this index; the focus stays in the table, or on the tabs, where it was.
+    function showTable(index: number): void {
+        const table = tables[index];
+
+        if (table == null) {
+            return;
+        }
+
+        const hadTableFocus = tableHost.contains(document.activeElement);
+        const hadTabFocus = tabs?.element.contains(document.activeElement) === true;
+
+        if (table.hidden === true && table.name != null && !shownHidden().has(index)) {
+            memory.shownSheets = [...(memory.shownSheets ?? []), table.name];
+        }
+
+        memory.activeSheet = table.name ?? undefined;
+        renderMain();
+
+        if (hadTableFocus) {
+            tableHost.querySelector<HTMLElement>('.table-body')?.focus({ preventScroll: true });
+        }
+        else if (hadTabFocus) {
+            tabs?.focusActive();
+        }
+
+        session.onSheetShown?.();
+    }
+
+    // Shows a hidden sheet and moves to it, or puts a shown one away again.
+    function toggleHidden(index: number): void {
+        const name = tables[index]?.name;
+
+        if (name == null) {
+            return;
+        }
+
+        if (!shownHidden().has(index)) {
+            showTable(index);
+
+            return;
+        }
+
+        memory.shownSheets = (memory.shownSheets ?? []).filter((shownName) => shownName !== name);
+        renderMain();
+        session.onSheetShown?.();
+    }
+
+    main.addEventListener('keydown', (event) => {
+        const move = SHEET_KEYS.find((entry) => entry.key === event.key);
+
+        if (move == null || tabs == null || !(event.ctrlKey || event.metaKey) || event.altKey) {
+            return;
+        }
+
+        event.preventDefault();
+        const strip = stripIndexes();
+        const target = strip[strip.indexOf(activeIndex()) + move.step];
+
+        if (target != null) {
+            showTable(target);
+        }
+    });
 
     const onSessionChange = (): void => {
         if (!workspace.isConnected) {
@@ -137,10 +334,10 @@ export function renderTableWorkspace(container: HTMLElement, data: QueryTableDat
         resizer.hidden = !open;
         panelHost.hidden = !open;
 
-        // Closing the panel puts the full table back.
-        if (!open && (session.result != null || session.controller != null)) {
+        // Closing the panel puts every sheet's rows back.
+        if (!open && (session.applied.size > 0 || session.controller != null)) {
             session.controller?.abort();
-            clearResult(session);
+            clearAllApplied(session);
         }
 
         renderMain();
@@ -152,7 +349,8 @@ export function renderTableWorkspace(container: HTMLElement, data: QueryTableDat
 
         if (open && !mounted) {
             mounted = true;
-            mountQueryPanel(panelHost, data, () => setOpen(false));
+            const link: WorkspaceLink = { data, activeTable: () => tables[activeIndex()] as QueryTable, showTable };
+            mountQueryPanel(panelHost, link, () => setOpen(false));
         }
 
         if (open) {
@@ -164,11 +362,51 @@ export function renderTableWorkspace(container: HTMLElement, data: QueryTableDat
     attachPanelResizer(resizer, workspace, () => setOpen(false));
     session.listeners.add(onSessionChange);
     setOpen(layout.open);
+
+    return {
+        showSheet: (name) => {
+            const index = tables.findIndex((table) => table.name?.toLowerCase() === name.toLowerCase());
+
+            if (index >= 0) {
+                showTable(index);
+            }
+
+            return index >= 0;
+        },
+        isConnected: () => workspace.isConnected,
+    };
 }
 
-// Drops the applied result, so the main table shows the file again.
-function clearResult(session: QuerySession): void {
-    session.result = null;
+function resultMemoryOf(session: QuerySession, key: string): TableViewMemory {
+    let memory = session.resultMemories.get(key);
+
+    if (memory == null) {
+        memory = {};
+        session.resultMemories.set(key, memory);
+    }
+
+    return memory;
+}
+
+// Drops the result applied to one sheet, so it shows its rows again.
+function clearApplied(session: QuerySession, key: string): void {
+    session.applied.delete(key);
+    session.resultMemories.delete(key);
+
+    if (session.lastRun?.sheet === key) {
+        session.lastRun = null;
+        session.status = '';
+    }
+
+    session.version += 1;
+    notify(session);
+}
+
+// Drops every sheet's result, so the file's rows show again.
+function clearAllApplied(session: QuerySession): void {
+    session.applied.clear();
+    session.resultMemories.clear();
+    session.lastRun = null;
     session.status = '';
     session.version += 1;
     notify(session);
@@ -201,10 +439,15 @@ function renderIndicator(bar: HTMLElement, result: LinqResult | null, onClear: (
 }
 
 // Shows a result in the main table area: rows in the regular table view, or one large value.
-function renderQueryResult(host: HTMLElement, result: LinqResult, toolbarExtras: () => ReadonlyArray<HTMLElement>): { readonly destroy: () => void } | void {
+function renderQueryResult(
+    host: HTMLElement,
+    result: LinqResult,
+    chrome: TableChrome,
+    memory: TableViewMemory,
+): { readonly destroy: () => void } | void {
     if (result.kind === 'scalar') {
         const text = formatValue(result.value);
-        host.append(h('div', {
+        const scalar = h('div', {
             class: 'query-scalar',
             children: [
                 h('div', { class: 'query-scalar-label', text: result.column }),
@@ -215,12 +458,23 @@ function renderQueryResult(host: HTMLElement, result: LinqResult, toolbarExtras:
                     attrs: { type: 'button', title: 'Copy the value' },
                     on: {
                         click: () => {
-                            void navigator.clipboard?.writeText(text);
+                            void copyTextWithToastAsync(text, 'Value copied.');
                         },
                     },
                 }),
             ],
-        }));
+        });
+        // The one value copies as a table of one cell under its column's name.
+        registerShownTable(scalar, {
+            rowCount: () => 1,
+            busyReason: () => null,
+            readRowsAsync: async () => ({ columns: [result.column], rows: [[text]] }),
+        });
+        host.append(scalar);
+
+        if (chrome.footer != null) {
+            host.append(chrome.footer);
+        }
 
         return;
     }
@@ -235,10 +489,11 @@ function renderQueryResult(host: HTMLElement, result: LinqResult, toolbarExtras:
     });
 
     return renderTableView(host, {
+        ...chrome,
         columns,
         getAllRows: () => rows,
         totalRowCount: rows.length,
-        toolbarExtras,
+        memory,
     });
 }
 
@@ -252,12 +507,15 @@ function sessionFor(key: string): QuerySession {
             editor: null,
             controller: null,
             status: '',
-            result: null,
+            applied: new Map(),
+            resultMemories: new Map(),
+            lastRun: null,
             error: null,
             elapsedMs: 0,
             helpOpen: false,
             version: 0,
             listeners: new Set(),
+            onSheetShown: null,
         };
         sessions.set(key, session);
     }
@@ -271,8 +529,24 @@ function notify(session: QuerySession): void {
     }
 }
 
-function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => void): void {
+// What the editor completes for the query as typed: the sheets of a workbook, and the columns of the sheet
+// the query names, or of the sheet on screen until it names one.
+function completionsFor(link: WorkspaceLink, text: string): QueryCompletions {
+    const tables = link.data.tables;
+    const named = sheetNamedIn(text)?.toLowerCase();
+    const table = (named == null ? null : tables.find((candidate) => candidate.name?.toLowerCase() === named)) ?? link.activeTable();
+
+    return {
+        columns: table.columns,
+        sheets: tables.flatMap((candidate) => (candidate.name == null ? [] : [{ name: candidate.name, hidden: candidate.hidden === true }])),
+        allowsStar: tables.length < 2,
+    };
+}
+
+function mountQueryPanel(host: HTMLElement, link: WorkspaceLink, close: () => void): void {
+    const { data } = link;
     const session = sessionFor(data.key);
+    const sheetNames = sheetNamesOf(data);
     clear(host);
 
     const historySelect = h('select', { class: 'input query-select', attrs: { title: 'Recent queries on this file' } }) as HTMLSelectElement;
@@ -309,14 +583,15 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
 
     session.editor?.destroy();
     session.handlers.onRun = () => {
-        void runAsync(session, data);
+        void runAsync(session, link);
     };
     session.handlers.onChange = (state) => {
         session.state = state;
     };
+    session.handlers.completions = (text) => completionsFor(link, text);
     const editor = mountQueryEditor({
         parent: editorHost,
-        columns: data.columns,
+        columns: link.activeTable().columns,
         handlers: session.handlers,
         state: session.state ?? undefined,
     });
@@ -328,7 +603,7 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
     }
 
     runButton.addEventListener('click', () => {
-        void runAsync(session, data);
+        void runAsync(session, link);
     });
     cancelButton.addEventListener('click', () => session.controller?.abort());
     clearButton.addEventListener('click', () => {
@@ -336,7 +611,7 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
         editor.setText('');
         editor.markError(null);
         session.error = null;
-        clearResult(session);
+        clearApplied(session, tableKeyOf(link.activeTable()));
         editor.focus();
     });
     helpButton.addEventListener('click', () => {
@@ -344,7 +619,14 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
         renderHelpState();
     });
 
-    let examples: LinqExampleQuery[] = buildExampleQueries(data.columns, []);
+    // A workbook's Source section names its own sheets.
+    const sections: ReadonlyArray<LinqReferenceSection> = [buildSheetSourceReference(sheetNames), ...LINQ_REFERENCE.slice(1)];
+    const sourceOf = (table: QueryTable): string => querySourceFor(sheetNames, table.name);
+    const examplesTitle = (table: QueryTable): string => (sheetNames.length > 1 && table.name != null
+        ? `Examples for ${table.name}`
+        : 'Examples for this table');
+    let examplesTable = link.activeTable();
+    let examples: LinqExampleQuery[] = buildExampleQueries(examplesTable.columns, [], sourceOf(examplesTable));
     const insert = (text: string): void => {
         editor.setText(text);
         editor.focus();
@@ -377,17 +659,29 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
         helpButton.dataset['active'] = String(session.helpOpen);
 
         if (session.helpOpen) {
-            renderHelp(help, examples, insert, () => {
-                session.helpOpen = false;
-                renderHelpState();
+            renderHelp(help, {
+                examplesTitle: examplesTitle(examplesTable),
+                examples,
+                sections,
+                insert,
+                back: () => {
+                    session.helpOpen = false;
+                    renderHelpState();
+                },
             });
         }
     };
 
     // The help's examples start from the column names alone and pick up real values once the sample rows are read.
-    const fillExamplesFromSampleAsync = async (): Promise<void> => {
+    const fillExamplesFromSampleAsync = async (table: QueryTable): Promise<void> => {
         try {
-            examples = buildExampleQueries(data.columns, await data.loadSampleRowsAsync());
+            const rows = await table.loadSampleRowsAsync();
+
+            if (examplesTable !== table) {
+                return;
+            }
+
+            examples = buildExampleQueries(table.columns, rows, sourceOf(table));
 
             if (session.helpOpen && help.isConnected) {
                 renderHelpState();
@@ -398,8 +692,30 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
         }
     };
 
+    // The examples and the grey sample query follow the sheet on screen.
+    const followSheet = (): void => {
+        const table = link.activeTable();
+        editor.setPlaceholder(queryPlaceholder(sourceOf(table)));
+
+        if (table === examplesTable) {
+            return;
+        }
+
+        examplesTable = table;
+        examples = buildExampleQueries(table.columns, [], sourceOf(table));
+        renderHelpState();
+        void fillExamplesFromSampleAsync(table);
+    };
+
+    session.onSheetShown = () => {
+        if (host.isConnected) {
+            followSheet();
+        }
+    };
+
     fillHistory();
-    void fillExamplesFromSampleAsync();
+    editor.setPlaceholder(queryPlaceholder(sourceOf(examplesTable)));
+    void fillExamplesFromSampleAsync(examplesTable);
 
     let renderedVersion = -1;
     const update = (): void => {
@@ -425,18 +741,21 @@ function mountQueryPanel(host: HTMLElement, data: QueryTableData, close: () => v
     update();
 }
 
-async function runAsync(session: QuerySession, data: QueryTableData): Promise<void> {
+async function runAsync(session: QuerySession, link: WorkspaceLink): Promise<void> {
     const editor = session.editor;
+    const { data } = link;
 
     if (editor == null) {
         return;
     }
 
     const text = editor.getText();
+    const sheetNames = sheetNamesOf(data);
     session.controller?.abort();
 
     if (text.trim() === '') {
-        session.error = { message: "Write a query first, like 'from * take 20'.", line: null, column: null, span: null };
+        const source = querySourceFor(sheetNames, link.activeTable().name);
+        session.error = { message: `Write a query first, like 'from ${source} take 20'.`, line: null, column: null, span: null };
         session.version += 1;
         notify(session);
 
@@ -457,8 +776,10 @@ async function runAsync(session: QuerySession, data: QueryTableData): Promise<vo
     let lastReport = 0;
 
     try {
-        compileQuery(text, data.columns);
-        const source = await data.loadSourceAsync((status) => {
+        const index = resolveQuerySheet(parseQuery(text), sheetNames);
+        const table = data.tables[index] as QueryTable;
+        compileQuery(text, table.columns);
+        const source = await table.loadSourceAsync((status) => {
             session.status = status;
             notify(session);
         }, controller.signal);
@@ -482,8 +803,13 @@ async function runAsync(session: QuerySession, data: QueryTableData): Promise<vo
             return;
         }
 
-        session.result = result;
+        const key = tableKeyOf(table);
+        session.applied.set(key, result);
+        session.resultMemories.set(key, {});
+        session.lastRun = { sheet: key, result };
         session.status = '';
+        // The result shows on the sheet the query read.
+        link.showTable(index);
     }
     catch (error: unknown) {
         if (session.controller !== controller && isAbortError(error)) {
@@ -494,6 +820,7 @@ async function runAsync(session: QuerySession, data: QueryTableData): Promise<vo
             session.status = 'Cancelled.';
         }
         else if (isLinqError(error)) {
+            error.locate(text);
             session.status = '';
             session.error = { message: error.message, line: error.line, column: error.column, span: { start: error.start, end: error.end } };
             session.editor?.markError(session.error.span);
@@ -532,7 +859,7 @@ function renderStatus(line: HTMLElement, session: QuerySession): void {
     }
 
     line.dataset['state'] = 'idle';
-    const result = session.result;
+    const result = session.lastRun?.result ?? null;
 
     if (result == null || session.error != null) {
         line.textContent = session.error == null ? 'Write a query and press Run.' : '';
@@ -562,20 +889,28 @@ function renderError(box: HTMLElement, error: QueryError | null): void {
     box.append(h('span', { text: error.message }));
 }
 
-function renderHelp(host: HTMLElement, examples: ReadonlyArray<LinqExampleQuery>, insert: (text: string) => void, back: () => void): void {
+interface HelpContent {
+    readonly examplesTitle: string;
+    readonly examples: ReadonlyArray<LinqExampleQuery>;
+    readonly sections: ReadonlyArray<LinqReferenceSection>;
+    readonly insert: (text: string) => void;
+    readonly back: () => void;
+}
+
+function renderHelp(host: HTMLElement, content: HelpContent): void {
     clear(host);
     host.append(h('div', {
         class: 'query-help-header',
         children: [
             h('h2', { text: 'Query syntax' }),
             h('span', { class: 'toolbar-spacer' }),
-            h('button', { class: 'button', text: 'Close help', attrs: { type: 'button' }, on: { click: back } }),
+            h('button', { class: 'button', text: 'Close help', attrs: { type: 'button' }, on: { click: content.back } }),
         ],
     }));
 
     const exampleList = h('div', { class: 'query-help-examples' });
 
-    for (const example of examples) {
+    for (const example of content.examples) {
         exampleList.append(h('div', {
             class: 'query-help-example',
             children: [
@@ -590,7 +925,7 @@ function renderHelp(host: HTMLElement, examples: ReadonlyArray<LinqExampleQuery>
                             attrs: { type: 'button', title: 'Copy the query' },
                             on: {
                                 click: () => {
-                                    void navigator.clipboard?.writeText(example.query);
+                                    void copyTextWithToastAsync(example.query, 'Query copied.');
                                 },
                             },
                         }),
@@ -598,7 +933,7 @@ function renderHelp(host: HTMLElement, examples: ReadonlyArray<LinqExampleQuery>
                             class: 'button button-primary',
                             text: 'Insert',
                             attrs: { type: 'button', title: 'Put the query in the editor' },
-                            on: { click: () => insert(example.query) },
+                            on: { click: () => content.insert(example.query) },
                         }),
                     ],
                 }),
@@ -607,9 +942,9 @@ function renderHelp(host: HTMLElement, examples: ReadonlyArray<LinqExampleQuery>
         }));
     }
 
-    host.append(h('section', { class: 'query-help-section', children: [h('h3', { text: 'Examples for this table' }), exampleList] }));
+    host.append(h('section', { class: 'query-help-section', children: [h('h3', { text: content.examplesTitle }), exampleList] }));
 
-    for (const section of LINQ_REFERENCE) {
+    for (const section of content.sections) {
         const list = h('dl', { class: 'query-help-list' });
 
         for (const entry of section.entries) {

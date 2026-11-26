@@ -1,9 +1,8 @@
 import { countLabel } from '../paths/valueFormat.js';
 
 // The pages typed for Save pages: numbers, ranges that run either way and ranges open at one end,
-// in any order and
-// with repeats, separated by commas, semicolons or spaces. "1, 2, 6-8, 1" is pages 1, 2, 6, 7, 8 and 1 again;
-// "8-6" is 8, 7 and 6;
+// in any order and with repeats, separated by commas, semicolons or spaces.
+// "1, 2, 6-8, 1" is pages 1, 2, 6, 7, 8 and 1 again; "8-6" is 8, 7 and 6;
 // "6-" runs to the last page and "-3" from the first. Spaces around a dash keep a range together.
 
 export type PageSelection =

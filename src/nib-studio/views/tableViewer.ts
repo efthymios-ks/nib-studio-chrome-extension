@@ -7,14 +7,14 @@ import { createArrayTableSource, createCsvTableSource } from '../../common/linq/
 import { EXCEL_DEFAULT_PASSWORD, readWorkbookEncryption } from '../../common/office/encryption/officeEncryption.js';
 import type { PasswordEncryption } from '../../common/office/encryption/officeEncryptionTypes.js';
 import { rememberUnlocked, unlockedBytesOf } from '../../common/office/encryption/unlockedFiles.js';
-import { readWorkbook, type Workbook } from '../../common/office/xlsxLoader.js';
+import { cachedWorkbookOf, readWorkbook, rememberWorkbook, type Sheet, type Workbook } from '../../common/office/xlsxLoader.js';
 import { clear, h } from '../app/dom.js';
 import { errorMessage } from '../../common/errorMessage.js';
 import { readTextBlobAsync } from '../../common/text/textEncoding.js';
 import { createPasswordCancelled } from './passwordPanel.js';
 import { askForPasswordAsync, waitForPaintAsync } from './passwordUnlock.js';
 import { BROWSER_CLOCK } from './previewZoomController.js';
-import { renderTableWorkspace } from './queryPanel.js';
+import { renderTableWorkspace, type QueryTable, type SheetMemory, type TableWorkspaceHandle } from './queryPanel.js';
 
 const WORKBOOK_PASSWORD_TITLE = 'This workbook is protected with a password';
 const UNSUPPORTED_WORKBOOK_TITLE = 'This workbook\'s encryption isn\'t supported';
@@ -65,12 +65,36 @@ interface LargeTableEntry {
     search: string;
 }
 
+// What each open table file keeps while its tab is open, so leaving the tab and coming back restores it:
+// the sort, filters, search, columns and scroll of each sheet, the sheet on screen and the hidden sheets shown.
+interface FileTableMemory {
+    // By sheet name; '' for the one table of a CSV or TSV file.
+    readonly tables: Map<string, TableViewMemory>;
+    readonly sheets: SheetMemory;
+    // The sheet on screen as the status bar names it, such as `Sheet 2 of 3 · Q2`; null for a file of one table.
+    sheetLabel: string | null;
+}
+
+// The headers and rows of a sheet, as the table shows them.
+interface SheetTable {
+    readonly sheet: Sheet;
+    readonly names: ReadonlyArray<string>;
+    readonly rows: ReadonlyArray<ReadonlyArray<unknown>>;
+}
+
 // A table is drawn again each time its tab or view comes back, so the index, block cache and view settings
 // of a large file are kept per File snapshot instead of being rebuilt each time.
 const largeTables = new WeakMap<File, Promise<LargeTableEntry>>();
 
-// Sort, filters, columns and scroll of each open table, so leaving its tab and coming back restores them.
-const tableMemories = new Map<string, TableViewMemory>();
+const tableMemories = new Map<string, FileTableMemory>();
+
+// The workspace on screen for each file, so a sheet can be shown from outside, as Lookup does.
+const liveWorkspaces = new Map<string, TableWorkspaceHandle>();
+
+const sheetLabelListeners = new Set<() => void>();
+
+// The sheets of each workbook as tables, made once per workbook read.
+const sheetTables = new WeakMap<Workbook, ReadonlyArray<SheetTable>>();
 
 // How many times each container was rendered into, so a password flow stops once the container shows something else.
 const renderCounts = new WeakMap<HTMLElement, number>();
@@ -81,15 +105,63 @@ const cancelledWorkbooks = new WeakSet<File>();
 // Workbooks Excel's own password was tried on, so it is tried once per snapshot.
 const defaultPasswordTried = new WeakSet<File>();
 
-export function tableMemoryFor(key: string): TableViewMemory {
+function fileMemoryFor(key: string): FileTableMemory {
     let memory = tableMemories.get(key);
 
     if (memory == null) {
-        memory = {};
+        memory = { tables: new Map(), sheets: {}, sheetLabel: null };
         tableMemories.set(key, memory);
     }
 
     return memory;
+}
+
+// What the table of a file, or of one sheet of a workbook, keeps while the file's tab is open.
+export function tableMemoryFor(key: string, sheet = ''): TableViewMemory {
+    const tables = fileMemoryFor(key).tables;
+    let memory = tables.get(sheet);
+
+    if (memory == null) {
+        memory = {};
+        tables.set(sheet, memory);
+    }
+
+    return memory;
+}
+
+// The sheet a workbook's tab shows, and the hidden sheets it shows.
+function sheetMemoryFor(key: string): SheetMemory {
+    return fileMemoryFor(key).sheets;
+}
+
+// The sheet on screen in a workbook's tab, such as `Sheet 2 of 3 · Q2`;
+// null for a file of one table, or one not drawn yet.
+export function sheetLabelOf(key: string): string | null {
+    return tableMemories.get(key)?.sheetLabel ?? null;
+}
+
+// The name of the sheet a workbook's tab shows; null when its tab isn't open or shows the first sheet it opened on.
+export function activeSheetOf(key: string): string | null {
+    return tableMemories.get(key)?.sheets.activeSheet ?? null;
+}
+
+// Calls `listener` whenever a tab moves to another sheet; returns the function that stops it.
+export function onSheetLabelChange(listener: () => void): () => void {
+    sheetLabelListeners.add(listener);
+
+    return () => {
+        sheetLabelListeners.delete(listener);
+    };
+}
+
+// Shows a sheet in a workbook's open tab: at once when the tab is on screen, otherwise when it is drawn next.
+export function revealSheet(key: string, sheet: string): void {
+    sheetMemoryFor(key).activeSheet = sheet;
+    const live = liveWorkspaces.get(key);
+
+    if (live != null && live.isConnected()) {
+        live.showSheet(sheet);
+    }
 }
 
 // Forgets the tables whose tabs closed.
@@ -99,8 +171,38 @@ export function pruneTableMemories(openKeys: ReadonlyArray<string>): void {
     for (const key of [...tableMemories.keys()]) {
         if (!keep.has(key)) {
             tableMemories.delete(key);
+            liveWorkspaces.delete(key);
         }
     }
+}
+
+function announceSheet(key: string, label: string | null): void {
+    const memory = fileMemoryFor(key);
+
+    if (memory.sheetLabel === label) {
+        return;
+    }
+
+    memory.sheetLabel = label;
+
+    for (const listener of [...sheetLabelListeners]) {
+        listener();
+    }
+}
+
+// Lays out the tables of a file with the query panel, keeping the workspace so a sheet can be shown from outside.
+function renderWorkspace(container: HTMLElement, key: string, tables: ReadonlyArray<QueryTable>): void {
+    const workspace = renderTableWorkspace(container, {
+        key,
+        tables,
+        sheetMemory: sheetMemoryFor(key),
+        onSheetChange: (label) => announceSheet(key, label),
+    });
+    liveWorkspaces.set(key, workspace);
+}
+
+function keyOf(input: TableViewerInput): string {
+    return input.path ?? input.fileName;
 }
 
 // A table that fails to open is forgotten, so the next render tries again.
@@ -129,8 +231,8 @@ async function renderLargeCsvTableAsync(container: HTMLElement, file: File, inpu
     const source = entry.source;
     const columns: TableColumn[] = source.columns.map((name, index) => ({ id: `col-${index}`, title: name }));
 
-    renderTableWorkspace(container, {
-        key: input.path ?? input.fileName,
+    renderWorkspace(container, keyOf(input), [{
+        name: null,
         columns: source.columns,
         loadSourceAsync: async (report, signal) => {
             await waitForIndexAsync(source, report);
@@ -143,14 +245,14 @@ async function renderLargeCsvTableAsync(container: HTMLElement, file: File, inpu
 
             return source.readRowsAsync(sampleRowNumbers(source.getRowCount()));
         },
-        renderTable: (host, toolbarExtras) => renderTableView(host, {
+        renderTable: (host, chrome) => renderTableView(host, {
+            ...chrome,
             columns,
             largeSource: source,
             initialFilters: entry.filters,
             initialSort: entry.sorts,
             initialSearch: entry.search,
-            toolbarExtras,
-            memory: tableMemoryFor(input.path ?? input.fileName),
+            memory: tableMemoryFor(keyOf(input)),
             onFilterChange: (filters) => {
                 entry.filters = filters;
             },
@@ -161,7 +263,7 @@ async function renderLargeCsvTableAsync(container: HTMLElement, file: File, inpu
                 entry.search = search;
             },
         }),
-    });
+    }]);
 }
 
 async function waitForIndexAsync(source: LargeCsvSource, report: (status: string) => void): Promise<void> {
@@ -197,28 +299,34 @@ function sampleRowNumbers(rowCount: number): Uint32Array {
     return rows;
 }
 
-// Renders rows held in memory, with the query panel beside them.
-function renderInMemoryTable(
-    container: HTMLElement,
-    input: TableViewerInput,
-    names: ReadonlyArray<string>,
-    rows: ReadonlyArray<ReadonlyArray<unknown>>,
-): void {
+interface InMemoryTableOptions {
+    readonly key: string;
+    // The sheet's name in a workbook; null for a CSV or TSV file.
+    readonly sheet: string | null;
+    readonly hidden?: boolean;
+    readonly names: ReadonlyArray<string>;
+    readonly rows: ReadonlyArray<ReadonlyArray<unknown>>;
+}
+
+// A table of rows held in memory: a CSV or TSV file, or one sheet of a workbook.
+function inMemoryTable(options: InMemoryTableOptions): QueryTable {
+    const { names, rows } = options;
     const columns: TableColumn[] = names.map((name, index) => ({ id: `col-${index}`, title: name }));
 
-    renderTableWorkspace(container, {
-        key: input.path ?? input.fileName,
+    return {
+        name: options.sheet,
+        hidden: options.hidden === true,
         columns: names,
         loadSourceAsync: async () => createArrayTableSource(names, rows),
         loadSampleRowsAsync: async () => rows.slice(0, QUERY_SAMPLE_ROWS),
-        renderTable: (host, toolbarExtras) => renderTableView(host, {
+        renderTable: (host, chrome) => renderTableView(host, {
+            ...chrome,
             columns,
             getAllRows: () => rows,
             totalRowCount: rows.length,
-            toolbarExtras,
-            memory: tableMemoryFor(input.path ?? input.fileName),
+            memory: tableMemoryFor(options.key, options.sheet ?? ''),
         }),
-    });
+    };
 }
 
 async function renderCsvTableAsync(container: HTMLElement, input: TableViewerInput): Promise<void> {
@@ -233,7 +341,7 @@ async function renderCsvTableAsync(container: HTMLElement, input: TableViewerInp
     const result = await parseCsvStreamAsync(source, { hasHeader: true });
     const names = (result.header ?? result.rows[0]?.map((_, index) => `Column ${index + 1}`) ?? []).map((name) => String(name));
 
-    renderInMemoryTable(container, input, names, result.rows);
+    renderWorkspace(container, keyOf(input), [inMemoryTable({ key: keyOf(input), sheet: null, names, rows: result.rows })]);
 }
 
 async function renderXlsxTableAsync(container: HTMLElement, input: TableViewerInput): Promise<void> {
@@ -244,11 +352,20 @@ async function renderXlsxTableAsync(container: HTMLElement, input: TableViewerIn
     }
 
     const file = input.file;
+    // A workbook already read from this snapshot shows at once, without reading or parsing it again.
+    const cached = cachedWorkbookOf(file);
+
+    if (cached != null) {
+        renderWorkbook(container, input, cached);
+
+        return;
+    }
+
     const bytes = new Uint8Array(await file.arrayBuffer());
     const encryption = readWorkbookEncryption(bytes);
 
     if (encryption == null) {
-        renderWorkbook(container, input, readWorkbook(bytes));
+        renderWorkbook(container, input, rememberWorkbook(file, readWorkbook(bytes)));
 
         return;
     }
@@ -263,21 +380,45 @@ async function renderXlsxTableAsync(container: HTMLElement, input: TableViewerIn
 
     if (plain != null) {
         clear(container);
-        renderWorkbook(container, input, readWorkbook(plain));
+        renderWorkbook(container, input, rememberWorkbook(file, readWorkbook(plain)));
     }
 }
 
-function renderWorkbook(container: HTMLElement, input: TableViewerInput, workbook: Workbook): void {
-    const sheet = workbook.sheets[0];
+// Each sheet as a table: its first row names the columns, and an empty header cell is named by its place.
+function sheetTablesOf(workbook: Workbook): ReadonlyArray<SheetTable> {
+    let tables = sheetTables.get(workbook);
 
-    if (sheet == null) {
+    if (tables == null) {
+        tables = workbook.sheets.map((sheet) => ({
+            sheet,
+            names: (sheet.rows[0] ?? []).map((name, index) => (name == null || String(name).trim() === ''
+                ? `Column ${index + 1}`
+                : String(name))),
+            rows: sheet.rows.slice(1),
+        }));
+        sheetTables.set(workbook, tables);
+    }
+
+    return tables;
+}
+
+function renderWorkbook(container: HTMLElement, input: TableViewerInput, workbook: Workbook): void {
+    const tables = sheetTablesOf(workbook);
+
+    if (tables.length === 0) {
         renderErrorCard(container, new Error('Workbook has no sheets.'));
 
         return;
     }
 
-    const names = (sheet.rows[0] ?? []).map((name, index) => (name == null || String(name).trim() === '' ? `Column ${index + 1}` : String(name)));
-    renderInMemoryTable(container, input, names, sheet.rows.slice(1));
+    const key = keyOf(input);
+    renderWorkspace(container, key, tables.map((table) => inMemoryTable({
+        key,
+        sheet: table.sheet.name,
+        hidden: table.sheet.hidden,
+        names: table.names,
+        rows: table.rows,
+    })));
 }
 
 // The plain workbook behind a password: from this snapshot's earlier unlocking, from Excel's own password for

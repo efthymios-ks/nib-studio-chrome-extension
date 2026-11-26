@@ -170,6 +170,37 @@ describe('parseQuery', () => {
         expect(clause?.kind === 'select' ? [clause.object, clause.items.length] : null).toEqual([true, 2]);
     });
 
+    it.each([
+        ['from *', null, null, '*'],
+        ['from table', null, null, 'table'],
+        ['from row in table', 'row', null, 'table'],
+        ['from Q2', null, 'Q2', 'Q2'],
+        ['from row in Q2', 'row', 'Q2', 'Q2'],
+        ["from 'North Region'", null, 'North Region', "'North Region'"],
+        ['from "North Region"', null, 'North Region', '"North Region"'],
+        ['from [North Region]', null, 'North Region', '[North Region]'],
+        ['from row in [North Region]', 'row', 'North Region', '[North Region]'],
+        ['from `North Region`', null, 'North Region', '`North Region`'],
+        ['from [Sales & Ops (draft)]', null, 'Sales & Ops (draft)', '[Sales & Ops (draft)]'],
+        ['from 2024', null, '2024', '2024'],
+        ['from Order', null, 'Order', 'Order'],
+        ['from o', null, 'o', 'o'],
+    ])('reads the source of %s', (text, rangeVariable, sheet, written) => {
+        const query = parseQuery(`${text} where total > 1`);
+
+        expect([query.rangeVariable, query.source.sheet]).toEqual([rangeVariable, sheet]);
+        expect(text.slice(query.source.span.start, query.source.span.end)).toBe(written);
+        expect(query.clauses.map((clause) => clause.kind)).toEqual(['where']);
+    });
+
+    it('keeps brackets after the source as indexing', () => {
+        const query = parseQuery('from row in [Q1] where row["unit price"] > 1');
+        const clause = query.clauses[0];
+
+        expect(query.source.sheet).toBe('Q1');
+        expect(clause?.kind === 'where' ? show(clause.condition) : null).toBe('(row["unit price"] > 1)');
+    });
+
     it('keeps spans on clauses', () => {
         const text = 'from * where total > 1';
         const clause = parseQuery(text).clauses[0];
@@ -179,8 +210,10 @@ describe('parseQuery', () => {
 
     it.each([
         ['select 1', "Start the query with 'from row in table' or 'from *'."],
-        ['from o in rows', "Queries always read the open table: write 'in table'."],
-        ['from o', "Expected 'in table' after 'from o'."],
+        ['from o in select', "After 'from o in', write 'table' or a sheet name, like 'in table' or 'in Q2'."],
+        ['from o in *', "After 'from o in', write 'table' or a sheet name, like 'in table' or 'in Q2'."],
+        ['from where', "After 'from', write '*', a sheet name or a row name with 'in', like 'from *', 'from Q2' or 'from row in table'."],
+        ['from', "After 'from', write '*', a sheet name or a row name with 'in', like 'from *', 'from Q2' or 'from row in table'."],
         ['from * join x in table', 'join is not supported: a query reads just the open table.'],
         ['from * from * ', 'Only one from is allowed: a query reads just the open table.'],
         ['from * select city group by city', "'group' cannot follow select; only where, orderby, distinct, skip and take can."],

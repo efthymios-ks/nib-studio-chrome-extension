@@ -1,9 +1,10 @@
 # Editor
 
 The **Files** surface shows one tab per open file, a toolbar with the views for the active file, and the editor or view below it.  
-Without a workspace it shows the start screen instead, unless a compare or a dropped file is open;
+Without a workspace it shows the start screen instead, unless a compare, a dropped file or a paste is open;
 with no tab open, it points to the Explorer and to right-clicking the tree for a new file.  
-The `+` button at the end of the tab bar opens a new compare; see [Compare](Compare.md#on-the-fly-compare).
+The `+` button at the end of the tab bar opens a new compare, see [Compare](Compare.md#on-the-fly-compare),
+or what is on the clipboard, see [Paste from clipboard](#paste-from-clipboard).
 
 ## Tabs
 
@@ -11,6 +12,7 @@ Each tab shows the file's type icon and name, a dot while it has unsaved edits, 
 Hovering a tab shows the file's path from the workspace root, such as `docs/readme.md`.  
 A file from outside the workspace carries a small `↗` after its name,
 and hovering its tab says it is outside the workspace and where **Save** writes; see [Drop to open](#drop-to-open).  
+A pasted tab has no `↗`, and hovering it says it was pasted from the clipboard and that **Save** asks where to save it.  
 Tabs keep the order they were opened in.
 
 ### Preview and permanent tabs
@@ -25,7 +27,7 @@ Tabs keep the order they were opened in.
 | Any edit in the preview tab | makes it permanent |
 
 There is at most one preview tab.  
-Files opened by **New file**, **Compare with…**, **Format JSON**, **Format YAML**, [Lookup](Lookup.md),
+Files opened by **New file**, **Format JSON**, **Format YAML**, [Lookup](Lookup.md),
 a desktop drop or a restored session open as permanent tabs.  
 A file opened from Lookup at a match in its content opens in **Editor** with the match selected,
 Markdown and HTML included.
@@ -47,12 +49,13 @@ The commands act on that tab, which need not be the active one.
 
 | Command | Effect |
 | --- | --- |
+| Save… | on a pasted tab, asks where to save the paste; see [Paste from clipboard](#paste-from-clipboard) |
 | Reveal in Explorer | opens the file's parent folders, selects its row, scrolls it into view and moves the focus to the tree; a hidden Explorer comes back, and on a narrow screen the drawer slides in; see [Explorer](Explorer.md#reveal-in-tree) |
 | Compare with… | **Compare with clipboard**, **Compare with a file…**, **Compare with open tab: name**, each in a new diff tab; see [Compare](Compare.md) |
 | New compare | an empty compare of the kind picked under it: Compare text, Compare JSON, Compare YAML, Compare XML, Compare Markdown or Compare tables (CSV/TSV) |
 | Copy name to clipboard | the file name |
 | Copy path to clipboard | the path from the workspace root |
-| Copy content to clipboard | the file's text as saved on disk |
+| Copy content to clipboard | the tab's text as it is now, unsaved edits and pastes included, as the toolbar's **Copy content** copies it |
 | Format JSON | reformats a JSON file, unsaved |
 | Format YAML | reformats a YAML file with 2-space indent, keeping its comments, unsaved |
 | Convert XML to JSON | opens the JSON in a new tab |
@@ -66,10 +69,11 @@ The commands act on that tab, which need not be the active one.
 | Close all | closes every tab |
 
 **Close others**, **Close to the right** and **Close all** list every tab with unsaved edits, as `Unsaved` lines, and ask before closing.  
-**Reveal in Explorer** sits on its own at the top of the menu, as on a diff tab.  
+**Reveal in Explorer** sits on its own at the top of the menu.  
 **Reveal in Explorer**, **Copy path to clipboard**, **Convert XML to JSON**,
 **Convert YAML to JSON** and **Convert JSON to YAML** work on tabs of workspace files;
 they are left out of the menu on the tab of a file from outside the workspace, which has no place in the workspace.  
+On a pasted tab, **Save…** sits at the top of the menu, and **Copy content to clipboard** copies the paste as it is now.  
 **Compare with…** and **Copy content to clipboard** show on the tab of every text file,
 whether its folder is expanded in the tree, collapsed, or outside the workspace;
 they are left out for a file that opens only as a preview, and for one that isn't text.
@@ -84,6 +88,7 @@ From left to right:
 
 - **View tabs** for the file type, listed below.
 - **Type badge:** `JSON`, `YAML`, `Markdown`, `XML`, `HTML`, `Text` or `Table`.
+- **Copy** buttons, joined as one group: **Copy raw** and **Copy formatted**, or **Copy content**; see [Copy](#copy).
 - **Compare with…:** a chooser for the other side, then a new diff tab; see [Compare](Compare.md#the-compare-with-chooser).
 - **Actions** for the type and view: **Format**, **Minify** and **Convert to YAML** for JSON,
   **Format** and **Convert to JSON** for YAML, **Convert to JSON** for XML,
@@ -92,6 +97,52 @@ From left to right:
 
 Hovering a view tab shows what the view does where it isn't obvious, such as **Interactive**.  
 Clicking a view tab or an action keeps the focus in the editor; switching to another editor view moves the focus to its editor.
+
+## Copy
+
+The copy buttons show in every view of a file's tab and copy from the tab's text as it is now:
+the editor's text, unsaved edits included, and a pasted tab's text;
+only a CSV or TSV too large to load is read from disk, as below.  
+A toast says what was copied, such as `Raw text copied.`, `Formatted document copied.` or `1,250 rows copied.`,
+and why when nothing was, such as `Could not copy: Document is not focused.`,
+or `Could not copy: the file is no longer on disk.` for a large file deleted since it opened.  
+Copying needs no permission of its own: the click asks for it.  
+There is no shortcut: `Ctrl+Shift+C` is Chrome's element picker, and `Ctrl+C` copies the selection.
+
+| File | Copy raw | Copy formatted | Copy content |
+| --- | --- | --- | --- |
+| Markdown | the source | the rendered document, as HTML with its text | |
+| HTML | the source | the page as written, as HTML with its text, without its scripts | |
+| CSV, TSV | the file's text | the table as shown, as an HTML table and tab-separated text | |
+| Workbooks | | the sheet as shown, as an HTML table and tab-separated text | |
+| JSON | the source | the document with a 2-space indent | |
+| YAML | the source | the document as **Format** lays it out | |
+| XML | the source | the document indented | |
+| Word documents | | the page, as HTML with its text | |
+| Any other text file | | | the text |
+
+- **Rendered documents** paste into Word, Outlook or Google Docs with their headings, lists, tables, links and pictures.
+  Workspace pictures go inside the copy, up to 10 MB of pictures in all,
+  a picture past that becoming a line that says so, and web pictures keep their address.
+  Mermaid diagrams go in as pictures, drawn at twice their size on white,
+  and as their source in a code block when they can't be drawn.
+  Links to the web or to a mail address stay links; a link to a workspace file or a heading keeps only its text.
+  Scripts, handlers, style sheets, forms and controls are never copied, and hidden parts are left out.
+  The plain text that goes with it is the text the document shows,
+  with list items on lines of their own and a table's cells tab-separated.
+- **An HTML page** copies as written: what its scripts would draw isn't in the copy, since they never run there.
+- **JSON, YAML and XML** that don't parse copy nothing, and the toast says why,
+  such as `Not valid JSON: Unexpected token (line 3, column 7). Nothing was copied.`;
+  **Copy raw** still copies the text as it is.
+  XML keeps its declaration, comments, CDATA and DOCTYPE, and an element holding text keeps its content as written.
+- **Tables** copy as shown; see [Tables](Tables.md#copy).
+- **Large CSV and TSV files:** **Copy raw** reads a file over 2 MB from disk, up to 64 MB;
+  a larger one copies nothing,
+  and the toast says `This file is too large to copy as text: it is 80.0 MB, and a copy takes up to 64.0 MB.`
+- **Word documents:** **Copy formatted** shows once the page does, so not while the document opens or waits for its password.
+- **Pictures** keep **Copy image** in their preview, an SVG included; PDFs, audio, video, fonts and archives have no copy buttons.
+- At 720 px wide or less, **Copy raw** and **Copy formatted** fold into one **Copy** button with a menu of both,
+  while the toolbar keeps to one row and scrolls sideways.
 
 ## Editor bar
 
@@ -121,7 +172,7 @@ There is no bar in **Preview**, **Tree**, **JSONPath**, **Schema**, **XPath** or
 | `.html`, `.htm` | Editor, Interactive, Split, Preview | none |
 | `.xml`, `.xsd`, `.xsl`, `.xslt`, `.config` | Editor, Tree, XPath, As JSON | Convert to JSON (Editor view) |
 | `.csv`, `.tsv`, `.xlsx`, `.xls`, `.xlsm`, `.xltx`, `.xltm`, `.xlsb`, `.ods` | Table | none, view only |
-| `.docx`, `.docm`, `.dotx`, `.dotm`, `.doc`, `.pdf` | no view tabs, the preview frame | none, view only |
+| `.docx`, `.docm`, `.dotx`, `.dotm`, `.doc`, `.pdf` | no view tabs, the preview frame | Copy formatted for Word documents, view only |
 | images, audio, video, fonts | no view tabs, the preview frame | Copy image for images, view only |
 | archives, such as `.zip`, `.7z` and `.tar.gz` | no view tabs, a message in the preview frame | none, view only |
 | presentations, such as `.pptx` and `.odp`, and OpenDocument `.odt` and `.odg` | no view tabs, a message in the preview frame | none, view only |
@@ -152,7 +203,7 @@ They open in **Preview**, and a new one made with **New file** opens in **Editor
 - **Interactive:** the page edited like a document, while the file stays HTML; see [Interactive](#interactive).
 - **Split:** the source on the left under **Source**, the page on the right under **Preview**,
   drawn again 300 ms after typing stops, with the divider of Markdown's [Split](Markdown.md#views).
-- **Preview:** the page alone; see [Preview](#preview).
+- **Preview:** the page alone, with its scripts running in a sandbox; see [Preview](#preview).
 
 ### Formatting
 
@@ -215,29 +266,63 @@ The source is never written out again from the page: each edit changes only the 
 
 ### Preview
 
-**Preview** draws the file as a page, the way a browser would, without running anything in it:
+**Preview** draws the file as a page, the way a browser would, and runs its scripts,
+inside a sandbox page that keeps the page away from the network and from the studio:
 
-- The page sits in a sandboxed frame that allows no scripts, so its styles never reach the studio and the studio's never reach it.
-- It is sanitised with DOMPurify first:
-  scripts, frames, objects, embeds, forms, `<base>`, `<meta>` and event handlers are dropped.
-  Its own `<style>` elements and `style` attributes stay, in this view only.
+- The page sits in the extension's sandbox page, `nib-studio/sandbox.html`, in a frame of its own,
+  so its styles never reach the studio and the studio's never reach it.
+- Its scripts run as written: `<script>` elements, event handlers such as `onclick`, `javascript:` links,
+  timers, `eval` and dialogs such as `alert`.
+  Buttons, tabs, menus and other controls a script drives work,
+  such as the **Diff**, **Before** and **After** buttons, the change stepping and the side-by-side view
+  of a page saved by a Markdown compare's **Export HTML**.
+- The page can't reach the network, the studio, the workspace or the extension:
+  the sandbox page has an origin of its own, with no `chrome` extension API,
+  no access to the studio's page, storage or files, and a content security policy that allows no connection at all;
+  see [Privacy](Privacy.md#markdown-and-html).
+  A `fetch`, a web image or font, a WebSocket or a script from the web added by the page's own script
+  is refused, and the browser's console for the frame says so.
+  WebRTC is taken away from the page before its scripts run.
+- The page has no frames or workers of its own:
+  `<iframe>`, `<frame>`, `<object>` and `<embed>` elements in the file are left out.
+  A frame the page's script makes never runs a script: one with an address is refused,
+  a `srcdoc` is refused as it is set, and one with no address stays empty.
+  A worker is refused.
+- A form's `submit` handlers run, so a script can read what was typed;
+  the submission itself goes nowhere and the page stays as it is.
+  A dialog's form, `method="dialog"`, closes its dialog.
+  A script's own `form.submit()` is refused, and the page is drawn again as written.
+- A script linked with `<script src="app.js">` is read from the workspace, relative to the page's folder,
+  and put in the page as it is, keeping `defer`, `async`, `type="module"` and its place among the page's scripts.
+  A script from the web, or from outside the workspace, is left out.
 - A style sheet linked with `<link rel="stylesheet" href="page.css">` is read from the workspace, relative to the page's folder,
   and put in the page; so is a style sheet it brings in with `@import`.
-  A style sheet open in a tab with unsaved edits is drawn from that tab's text, so the page shows the edits before they are saved.
   Images, backgrounds and fonts the CSS points at come from the workspace too.
-- Images come from the workspace, resolved like [Markdown images](Markdown.md#images), TIFF included;
+- A style sheet or script open in a tab with unsaved edits is drawn from that tab's text,
+  so the page shows the edits before they are saved.
+- Images, video and other files the page loads come from the workspace, resolved like [Markdown images](Markdown.md#images),
+  TIFF included;
   a HEIC picture shows `Nib Studio doesn't decode HEIC pictures.`,
   a missing one shows `Image not found:` and its path, and a web image shows a placeholder.
-- Nothing loads from the web: a web style sheet is left out, and a web image, font or video is never fetched.
+- Nothing loads from the web: a web style sheet or script is left out, and a web image, font or video is never fetched.
+  `<base>` and a refresh `<meta>` are left out too.
 - A click on a link works as in the Markdown preview: a workspace file opens in a permanent tab,
-  a folder expands in the Explorer, a web, `mailto:` or `tel:` link opens in a new browser tab, and `#id` scrolls within the page.
-  A middle click on a web link opens it in a new tab too.
+  a folder expands in the Explorer, a web, `mailto:` or `tel:` link opens in a new browser tab,
+  and a missing file says so in a toast.
+  A middle click on a link does the same.
+  Only a click or a key press opens a link; a link the page's script clicks by itself opens nothing.
   Hovering a workspace link shows its path from the workspace folder.
-- `Ctrl+S` in the page saves the file, as it does in the editor.
-- The page is drawn again 300 ms after the text changes, keeping its scroll,
-  and when a style sheet or image it uses changes on disk.
-- An HTML file dropped from outside the workspace has no workspace folder: its style sheets are left out,
+- `#id` links, and a script that sets `location.hash`, move within the page, as in a browser.
+  A script that sends the page to another address, such as `location.href = 'https://example.com'`, is stopped:
+  the page is drawn again as written, once, with a toast that says so.
+- `Ctrl+S` in the page saves the file, as it does in the editor, unless the page's own script takes the key.
+- The page is drawn again 300 ms after the text changes, and when a style sheet, script or image it uses changes on disk.
+  Each drawing runs the page's scripts afresh, in a new sandbox page that loads beneath the shown one
+  and takes its place once it has loaded, keeping the scroll.
+- The page is light, on white, whatever the studio's theme, unless its own styles say otherwise.
+- An HTML file dropped from outside the workspace has no workspace folder: its style sheets and linked scripts are left out,
   its relative images show a placeholder, and its relative links say so in a toast.
+  Its own inline scripts still run.
 
 ## Editing
 
@@ -252,8 +337,8 @@ The editor is CodeMirror 6, with:
 - A JSON validator that underlines syntax errors and marks them in the gutter; see [JSON](Json.md#editor).
 - A YAML validator that does the same for YAML, with the line and column in the message,
   and marks warnings, such as a repeated key, in the warning colour; see [YAML](Yaml.md#editor).
-- The [editor bar](#editor-bar) above the text, with Markdown formatting for Markdown files;
-  see [Markdown](Markdown.md#formatting).
+- The [editor bar](#editor-bar) above the text, with Markdown formatting for Markdown files
+  and HTML formatting for HTML files; see [Markdown](Markdown.md#formatting) and [HTML](#formatting).
 
 | Key | Effect |
 | --- | --- |
@@ -274,6 +359,7 @@ The editor is CodeMirror 6, with:
 Every selection and cursor is drawn, and typing, deleting and pasting act on all of them at once.  
 In Markdown, `Enter`, `Backspace`, `Tab` and `Shift+Tab` also continue, end and nest lists,
 and `Ctrl+B`, `Ctrl+I`, `Ctrl+Shift+X`, `Ctrl+E` and `Ctrl+K` format; see [Markdown](Markdown.md#formatting).  
+In HTML, `Ctrl+B`, `Ctrl+I` and `Ctrl+K` format; see [HTML](#formatting).  
 With a second keyboard layout, such as Greek, the shortcuts follow the place of the key,
 so `Ctrl+σ` saves and `Ctrl+δ` adds the next occurrence, as Chrome reads its own shortcuts.
 
@@ -294,9 +380,11 @@ so `Ctrl+σ` saves and `Ctrl+δ` adds the next occurrence, as Chrome reads its o
 - Files keep their [encoding](#text-encodings) too.
 - A conversion in a tab of its own, such as `orders.xml.converted.json`, isn't on disk until it is saved,
   so it opens unsaved, with **Save**, and closing it asks first.
+- So does a tab opened by **Paste from clipboard**,
+  whose **Save** asks for a name and where the file goes; see [Paste from clipboard](#paste-from-clipboard).
 - Leaving the workspace asks first when workspace files are dirty:
-  switching to another workspace in the switcher, **Open folder…**, opening a dropped folder,
-  and **Forget** on the open workspace.
+  switching to another workspace in the switcher, **Open folder…**, **Open as workspace** in the Explorer,
+  opening a dropped folder, and **Forget** on the open workspace.
   The **Unsaved changes** dialog lists each file by its path from the workspace root,
   and offers **Save all**, **Discard** and **Cancel**.
   **Save all** stops at the first file that can't be saved, and the workspace stays open.
@@ -373,6 +461,79 @@ Tabs of files from outside the workspace:
 - A large CSV or TSV opens as a table that reads rows from disk as you scroll, like one in the workspace.
 
 Files dropped on the Explorer tree are imported instead; see [Explorer](Explorer.md#drop-from-the-desktop).
+
+## Paste from clipboard
+
+**Paste from clipboard**, the last item of the `+` menu at the end of the tab bar and of **Start a compare** on the start screen,
+opens what is on the clipboard in a tab of its own.  
+It works with no workspace open too.  
+The item is left out where the browser can't read the clipboard.  
+Chrome may ask whether Nib Studio may see the clipboard, as for **Compare with clipboard**; the extension asks for no extra permission.
+
+What it opens:
+
+- **Text** opens with the views of the type its content reads as, in the view a file of that type opens in:
+  **Tree** and **JSONPath** for JSON and YAML, **Tree** and **XPath** for XML, **Table** for CSV and TSV,
+  and **Preview** for Markdown and HTML, which open in it.
+- **A picture**, such as a screenshot, opens in the image preview.
+- **Text and a picture together**, as Excel and Word put on the clipboard for copied cells or text, open as the text.
+  The HTML a copy from a page or an editor also carries is never read, so the tab holds the plain text.
+
+How the type is told, strictly, so that a sentence or a single line stays plain text:
+
+| Type | When |
+| --- | --- |
+| JSON | an object or an array that parses as JSON; a bare number, string or `true` is plain text |
+| HTML | a page that starts with `<!DOCTYPE html>` or `<html>`, or markup that starts with an HTML element such as `<div>`, `<p>` or `<table>`, closes a tag and ends with one |
+| XML | well-formed markup that isn't HTML |
+| YAML | at least two `key:` lines, no YAML error, and every document a mapping or a list of mappings; a sentence with a colon, a stack trace or a plain list is not YAML |
+| TSV | two rows or more, each with the same number of tabs, and no column empty on every row, so lines of code indented with a tab aren't a table |
+| CSV | the same with commas or semicolons, where most commas aren't followed by a space, as they are in prose |
+| Markdown | a fenced code block, a table, or two kinds of Markdown, such as a heading and a list, or bold text and a link; a lone heading reads as a script's comment just as well |
+| Plain text | anything else |
+
+Names:
+
+- The first pasted tab is `Clipboard.json`, `Clipboard.md` and so on, by its type, or `Clipboard.png` for a picture.
+- The next ones are numbered after the highest number among the open tabs named so, saved pastes included,
+  so no two tabs share a name: `Clipboard 2.csv`, `Clipboard 3.txt`.
+  Once no such tab is open, numbering starts again at `Clipboard`.
+
+The tab:
+
+- It is unsaved from the start, with the dirty dot, and closing it asks **Discard unsaved changes** first.
+- It has the toolbar, views and editor of its type, and edits to it stay unsaved until it is saved.
+- It belongs to no folder, so it stays open when the workspace changes,
+  is left out of `.nib-studio-configuration.json` and of Lookup,
+  and relative links and images in pasted Markdown or HTML lead nowhere, as in a file from outside the workspace.
+- Its context menu starts with **Save…**, which a table or a picture needs, as their toolbars have no **Save** button.
+  **Reveal in Explorer**, **Copy path to clipboard** and the conversions are left out until it is saved;
+  **Copy content to clipboard** and the toolbar's copy buttons copy its text as it is now.
+
+Saving:
+
+- **Save**, `Ctrl+S`, in a table or a picture's preview too, or **Save…** in the tab's menu,
+  opens **Save Clipboard.json** with the name to give it, its base name selected.
+  The file goes in the folder selected in the Explorer, or the folder of the file selected there,
+  or at the workspace root when nothing is selected; the dialog says where, such as `Will be saved in docs/`.
+- The suggested name is the tab's name, or the next number no entry of that folder takes, such as `Clipboard 2.json`.
+  A name a file, a folder or an unsaved tab already takes, ignoring case, is refused in the dialog,
+  and a file never overwrites one that appeared meanwhile.
+- The text keeps the line endings it was copied with, and saves as UTF-8; a picture saves its own bytes.
+- Once written, the tab becomes the file's tab: it takes the file's name and path, its row shows in the Explorer,
+  and later saves write to it as for any workspace file.
+- With no workspace open, **Save** asks `No workspace is open, so choose where to save Clipboard.json.`,
+  and **Save as…** opens the browser's save dialog; the tab then saves back to the picked file,
+  like a [file from outside the workspace](#drop-to-open).
+
+Toasts:
+
+| Case | Toast |
+| --- | --- |
+| Nothing, or only blank text, on the clipboard | `The clipboard is empty.` |
+| Chrome or the user refused to let Nib Studio read it | `Nib Studio was not allowed to read the clipboard.` |
+| Something other than text or a picture, such as formatted text with no plain text | `The clipboard holds no text or picture to paste.` |
+| Any other failure | the browser's message, or `Could not read the clipboard.` |
 
 ## Session restore
 

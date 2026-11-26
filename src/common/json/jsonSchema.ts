@@ -2,6 +2,7 @@
 // because the extension's content security policy blocks `eval` and `new Function`.
 import { Validator, type OutputUnit, type Schema } from '@cfworker/json-schema';
 import { errorMessage } from '../errorMessage.js';
+import { isPlainObject } from './jsonTree.js';
 
 export interface SchemaMatch {
     readonly ok: true;
@@ -181,10 +182,6 @@ function toMessage(unit: OutputUnit): string {
     }
 
     return message.replace(/^Instance /, 'Value ');
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function countKeywords(schema: Record<string, unknown>): number {

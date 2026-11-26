@@ -1,6 +1,6 @@
 import { decodeBase64 } from '../../common/encoding/base64.js';
+import { copyFailureMessage, copyTextAsync } from '../app/clipboard.js';
 import { toast } from '../app/toast.js';
-import { errorMessage } from '../../common/errorMessage.js';
 
 // One delegated listener copies code blocks; each `.md-code-copy` button carries its source in base64,
 // so the handler keeps no state across re-renders.
@@ -31,11 +31,10 @@ async function copyCodeFromButtonAsync(button: HTMLButtonElement): Promise<void>
     }
 
     try {
-        const text = decodeBase64(encoded);
-        await navigator.clipboard.writeText(text);
+        await copyTextAsync(decodeBase64(encoded));
         toast('Code copied.', 'ok');
     }
     catch (error) {
-        toast(errorMessage(error, 'Copy failed.'), 'fail');
+        toast(copyFailureMessage(error), 'fail');
     }
 }

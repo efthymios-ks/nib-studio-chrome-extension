@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LookupCandidate } from './lookupMatcher.js';
 import { lookUp, SNIPPET_LEAD_CHARS, SNIPPET_LENGTH } from './lookupResults.js';
-import { flattenText } from './lookupText.js';
+import { flattenText, type TextSection } from './lookupText.js';
 
 function file(path: string, source: string | null, keepLines = true): LookupCandidate {
     const flat = source == null ? null : flattenText(source, { keepLines });
@@ -63,6 +63,30 @@ describe('lookUp', () => {
         const [result] = lookUp([file('invoice.txt', 'Customer: Anna   Smith')], 'anna smith').results;
 
         expect(result?.preview?.matchText).toBe('Anna Smith');
+    });
+
+    it('names the sheet and row of a match in a workbook, on the third sheet too', () => {
+        const flat = flattenText('order_id total\nQ1-1 120\norder_id total\nQ2-1 300\ncustomer revenue\nThessaly Ironworks 5400', { keepLines: true });
+        const sections: TextSection[] = [
+            { name: 'Q1', firstLine: 1, firstNumber: 1 },
+            { name: 'Q2', firstLine: 3, firstNumber: 1 },
+            { name: 'North Region', firstLine: 5, firstNumber: 2 },
+        ];
+        const book: LookupCandidate = { path: 'data/sales.xlsx', name: 'sales.xlsx', folder: 'data', text: flat.text, lineStarts: flat.lineStarts, sections };
+
+        const [ironworks] = lookUp([book], 'thessaly ironworks').results;
+        const [second] = lookUp([book], 'Q2-1').results;
+
+        expect(ironworks?.preview?.sheet).toEqual({ name: 'North Region', row: 3 });
+        expect(ironworks?.preview?.line).toBeNull();
+        expect(second?.preview?.sheet).toEqual({ name: 'Q2', row: 2 });
+    });
+
+    it('names no sheet in a text file', () => {
+        const [result] = lookUp([file('notes.txt', 'one\ntwo apple')], 'apple').results;
+
+        expect(result?.preview?.sheet).toBeNull();
+        expect(result?.preview?.line).toBe(2);
     });
 
     it('counts every match beyond the ones listed', () => {

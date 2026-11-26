@@ -33,7 +33,7 @@ export interface RuledDiffLine {
     readonly marker: RuledDiffMarker;
     readonly originalLineNumber: number | null;
     readonly modifiedLineNumber: number | null;
-    // The real line on each side, never the normalized comparison key.
+    // The real line on each side, never the normalised comparison key.
     readonly originalText: string | null;
     readonly modifiedText: string | null;
 }

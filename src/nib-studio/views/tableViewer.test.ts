@@ -8,6 +8,7 @@ import {
     encryptedPackageFile,
     encryptionInfoStream,
 } from '../../common/office/testing/encryptionFixtures.js';
+import { SALES_SHEETS, buildSheetsWorkbook } from '../../common/office/testing/workbookFixtures.js';
 import { readWorkbook } from '../../common/office/xlsxLoader.js';
 import { settleAsync } from '../testing/testHelpers.js';
 import { LargeCsvSource } from './largeCsvSource.js';
@@ -26,10 +27,34 @@ vi.mock('../../common/csv/csvLimits.js', async (importOriginal) => ({
     isLargeTableFile: (path: string, size: number) => /\.(csv|tsv)$/.test(path) && size > SMALL_LARGE_TABLE_BYTES,
 }));
 
-const { pruneTableMemories, renderTableViewerAsync, tableMemoryFor } = await import('./tableViewer.js');
+const {
+    activeSheetOf,
+    onSheetLabelChange,
+    pruneTableMemories,
+    renderTableViewerAsync,
+    revealSheet,
+    sheetLabelOf,
+    tableMemoryFor,
+} = await import('./tableViewer.js');
 
 function headers(container: HTMLElement): string[] {
     return [...container.querySelectorAll('.table-workspace-main th .table-header-label')].map((cell) => cell.textContent ?? '');
+}
+
+function tabNames(container: HTMLElement): string[] {
+    return [...container.querySelectorAll<HTMLElement>('.sheet-tab')].filter((tab) => !tab.hidden).map((tab) => tab.textContent ?? '');
+}
+
+function activeTab(container: HTMLElement): string | null {
+    return container.querySelector('.sheet-tab[aria-selected="true"]')?.textContent ?? null;
+}
+
+function clickTab(container: HTMLElement, name: string): void {
+    ([...container.querySelectorAll<HTMLElement>('.sheet-tab')].find((tab) => tab.textContent === name) as HTMLElement).click();
+}
+
+function firstCells(container: HTMLElement): string[] {
+    return [...container.querySelectorAll('.table-workspace-main tbody tr')].map((row) => row.querySelector('.table-cell')?.textContent ?? '');
 }
 
 describe('tableMemoryFor', () => {
@@ -43,6 +68,24 @@ describe('tableMemoryFor', () => {
         pruneTableMemories(['b.csv']);
         expect(tableMemoryFor('a.csv')).not.toBe(memory);
         expect(tableMemoryFor('a.csv')).toEqual({});
+    });
+});
+
+describe('sheet memories', () => {
+    it('keeps a memory per sheet, and forgets them all with the tab', () => {
+        const first = tableMemoryFor('book.xlsx', 'Q1');
+        const second = tableMemoryFor('book.xlsx', 'Q2');
+        revealSheet('book.xlsx', 'Q2');
+
+        expect(first).not.toBe(second);
+        expect(tableMemoryFor('book.xlsx', 'Q1')).toBe(first);
+        expect(tableMemoryFor('book.xlsx')).not.toBe(first);
+        expect(activeSheetOf('book.xlsx')).toBe('Q2');
+
+        pruneTableMemories([]);
+
+        expect(tableMemoryFor('book.xlsx', 'Q1')).not.toBe(first);
+        expect(activeSheetOf('book.xlsx')).toBeNull();
     });
 });
 
@@ -137,12 +180,13 @@ describe('renderTableViewerAsync', () => {
         openAsync.mockRestore();
     });
 
-    it('renders the first sheet of a workbook, naming blank header cells by position', async () => {
+    it('renders a workbook with a tab per visible sheet, the first one shown, naming blank header cells by position', async () => {
         const file = new File(['xlsx'], 'book.xlsx');
         vi.mocked(readWorkbook).mockReturnValueOnce({
             sheets: [
-                { name: 'People', hidden: false, rows: [['name', ''], ['Ada', 36], ['Alan', 41]] },
-                { name: 'Other', hidden: false, rows: [['ignored']] },
+                { name: 'Secret', hidden: true, rows: [['hidden']], firstRow: 1 },
+                { name: 'People', hidden: false, rows: [['name', ''], ['Ada', 36], ['Alan', 41]], firstRow: 1 },
+                { name: 'Other', hidden: false, rows: [['other']], firstRow: 1 },
             ],
         });
 
@@ -152,7 +196,9 @@ describe('renderTableViewerAsync', () => {
         expect(readWorkbook).toHaveBeenCalledWith(new TextEncoder().encode('xlsx'));
         expect(headers(container)).toEqual(['name', 'Column 2']);
         expect(container.textContent).toContain('Alan');
-        expect(container.textContent).not.toContain('ignored');
+        expect(container.querySelector('.table-body')?.textContent).not.toContain('hidden');
+        expect(tabNames(container)).toEqual(['People', 'Other']);
+        expect(activeTab(container)).toBe('People');
     });
 
     it('renders macro-enabled, template and binary Excel workbooks and OpenDocument spreadsheets as tables', async () => {
@@ -331,5 +377,136 @@ describe('renderTableViewerAsync with a password', () => {
 
         expect(container.querySelector('h2')?.textContent).toBe('This workbook\'s encryption isn\'t supported');
         expect(container.querySelector('p')?.textContent).toContain('Open it in Excel to read it.');
+    });
+});
+
+describe('renderTableViewerAsync with the sheets of a workbook', () => {
+    let container: HTMLElement;
+
+    beforeEach(() => {
+        localStorage.clear();
+        pruneTableMemories([]);
+        container = document.createElement('div');
+        document.body.append(container);
+    });
+
+    afterEach(() => {
+        container.remove();
+    });
+
+    function salesFile(name = 'sales.xlsx'): File {
+        return new File([buildSheetsWorkbook(SALES_SHEETS).slice()], name);
+    }
+
+    it('shows every visible sheet of each workbook format as a tab', async () => {
+        for (const [fileName, bookType] of [['sales.xlsx', 'xlsx'], ['sales.xls', 'biff8'], ['sales.xlsb', 'xlsb']] as const) {
+            const file = new File([buildSheetsWorkbook(SALES_SHEETS, bookType).slice()], fileName);
+
+            await renderTableViewerAsync(container, { fileName, file, path: `data/${fileName}` });
+            await settleAsync();
+
+            expect(tabNames(container), fileName).toEqual(['Q1', 'Q2', 'North Region']);
+            expect(container.querySelector('.sheet-tabs-hidden')?.textContent, fileName).toBe('⋯ 1 hidden');
+        }
+    });
+
+    it('reads and parses a workbook once per snapshot: switching sheets and coming back read nothing again', async () => {
+        const file = salesFile();
+        const read = vi.spyOn(file, 'arrayBuffer');
+        vi.mocked(readWorkbook).mockClear();
+
+        await renderTableViewerAsync(container, { fileName: file.name, file, path: 'data/sales.xlsx' });
+        clickTab(container, 'North Region');
+        clickTab(container, 'Q2');
+        await renderTableViewerAsync(container, { fileName: file.name, file, path: 'data/sales.xlsx' });
+
+        expect(read).toHaveBeenCalledTimes(1);
+        expect(readWorkbook).toHaveBeenCalledTimes(1);
+        expect(activeTab(container)).toBe('Q2');
+
+        await renderTableViewerAsync(container, { fileName: file.name, file: salesFile(), path: 'data/sales.xlsx' });
+
+        expect(readWorkbook).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the sheet on screen and each sheet\'s sort while the tab is open, and forgets them when it closes', async () => {
+        const file = salesFile();
+        const path = 'data/sales.xlsx';
+        await renderTableViewerAsync(container, { fileName: file.name, file, path });
+
+        (container.querySelector('th[data-column-id="col-2"]') as HTMLElement).click();
+        expect(firstCells(container)).toEqual(['Q1-3', 'Q1-2', 'Q1-1']);
+        clickTab(container, 'Q2');
+        expect(firstCells(container)).toEqual(['Q2-1', 'Q2-2']);
+
+        await renderTableViewerAsync(container, { fileName: file.name, file, path });
+        expect(activeTab(container)).toBe('Q2');
+        clickTab(container, 'Q1');
+        expect(firstCells(container)).toEqual(['Q1-3', 'Q1-2', 'Q1-1']);
+
+        pruneTableMemories([]);
+        await renderTableViewerAsync(container, { fileName: file.name, file, path });
+
+        expect(activeTab(container)).toBe('Q1');
+        expect(firstCells(container)).toEqual(['Q1-1', 'Q1-2', 'Q1-3']);
+    });
+
+    it('names the sheet on screen for the status bar, and says when it changes', async () => {
+        const file = salesFile();
+        const listener = vi.fn();
+        const stop = onSheetLabelChange(listener);
+        await renderTableViewerAsync(container, { fileName: file.name, file, path: 'data/sales.xlsx' });
+
+        expect(sheetLabelOf('data/sales.xlsx')).toBe('Sheet 1 of 3 · Q1');
+
+        clickTab(container, 'North Region');
+
+        expect(sheetLabelOf('data/sales.xlsx')).toBe('Sheet 3 of 3 · North Region');
+        expect(activeSheetOf('data/sales.xlsx')).toBe('North Region');
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        stop();
+        clickTab(container, 'Q1');
+        expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    it('names no sheet for a CSV file', async () => {
+        await renderTableViewerAsync(container, { fileName: 'people.csv', text: 'name\nAda\n', path: 'people.csv' });
+
+        expect(container.querySelector('.sheet-tabs')).toBeNull();
+        expect(sheetLabelOf('people.csv')).toBeNull();
+    });
+
+    it('shows a sheet asked for from outside, at once or when the table is drawn', async () => {
+        const file = salesFile();
+        revealSheet('data/sales.xlsx', 'North Region');
+        await renderTableViewerAsync(container, { fileName: file.name, file, path: 'data/sales.xlsx' });
+
+        expect(activeTab(container)).toBe('North Region');
+
+        revealSheet('data/sales.xlsx', 'Q2');
+
+        expect(activeTab(container)).toBe('Q2');
+    });
+
+    it('opens every sheet of a locked workbook once its password is given', async () => {
+        const plain = buildSheetsWorkbook(SALES_SHEETS);
+        const file = new File([await buildStandardEncryptedAsync({ password: 'tika', plain })], 'locked-sales.xlsx');
+        void renderTableViewerAsync(container, { fileName: file.name, file, path: 'locked-sales.xlsx' });
+        await vi.waitFor(() => expect(container.querySelector('.password-panel')).not.toBeNull(), { timeout: 5000 });
+
+        (container.querySelector('.password-panel-input') as HTMLInputElement).value = 'tika';
+        container.querySelector('.password-panel')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        await vi.waitFor(() => expect(tabNames(container)).toEqual(['Q1', 'Q2', 'North Region']), { timeout: 5000 });
+
+        clickTab(container, 'North Region');
+
+        expect(headers(container)).toEqual(['customer', 'city', 'revenue']);
+        expect(firstCells(container)).toEqual(['Thessaly Ironworks', 'Olympus Foods']);
+
+        await renderTableViewerAsync(container, { fileName: file.name, file, path: 'locked-sales.xlsx' });
+
+        expect(container.querySelector('.password-panel')).toBeNull();
+        expect(activeTab(container)).toBe('North Region');
     });
 });

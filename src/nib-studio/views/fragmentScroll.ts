@@ -1,4 +1,4 @@
-import { headingSlug } from '../../common/markdown/preview.js';
+import { headingSlug } from '../../common/markdown/headingSlug.js';
 
 // The element a `#fragment` names: an id, an anchor's name, or the id the heading's text gives.
 export function findTarget(root: ParentNode, fragment: string): HTMLElement | null {

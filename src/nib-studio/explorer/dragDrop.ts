@@ -78,7 +78,8 @@ export interface Collision {
     readonly name: string;
 }
 
-// The sources whose name already exists in the target folder.
+// The sources whose name already exists in the target folder, ignoring case, as Windows folders do;
+// the target path names the entry there as it is on disk.
 export function detectCollisions(
     sources: ReadonlyArray<string>,
     targetFolder: string,
@@ -88,11 +89,13 @@ export function detectCollisions(
 
     for (const source of sources) {
         const name = basename(source);
+        const wanted = name.toLowerCase();
+        const existing = [...existingNamesInTarget].find((candidate) => candidate.toLowerCase() === wanted);
 
-        if (existingNamesInTarget.has(name)) {
+        if (existing != null) {
             result.push({
                 sourcePath: source,
-                targetPath: joinPath(targetFolder, name),
+                targetPath: joinPath(targetFolder, existing),
                 name,
             });
         }

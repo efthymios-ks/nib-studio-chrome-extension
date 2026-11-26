@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerSaveShortcutGuard } from './saveShortcut.js';
 
 function press(target: EventTarget, init: KeyboardEventInit): KeyboardEvent {
@@ -89,5 +89,19 @@ describe('registerSaveShortcutGuard', () => {
         registerSaveShortcutGuard(document)();
 
         expect(press(document.body, { key: 's', ctrlKey: true }).defaultPrevented).toBe(false);
+    });
+
+    it('runs on a window after the page\'s own key handlers, which can take Ctrl+S for themselves', () => {
+        const onSave = vi.fn();
+        remove = registerSaveShortcutGuard(window, onSave);
+
+        expect(press(document.body, { key: 's', ctrlKey: true }).defaultPrevented).toBe(true);
+
+        const takeKey = (event: Event): void => event.preventDefault();
+        document.addEventListener('keydown', takeKey);
+        press(document.body, { key: 's', ctrlKey: true });
+        document.removeEventListener('keydown', takeKey);
+
+        expect(onSave).toHaveBeenCalledTimes(1);
     });
 });

@@ -98,6 +98,6 @@ describe('attachCodeCopyHandler', () => {
 
         const toast = document.querySelector<HTMLElement>('.toast');
         expect(toast?.dataset['tone']).toBe('fail');
-        expect(toast?.textContent).toBe('Clipboard blocked.');
+        expect(toast?.textContent).toBe('Could not copy: Clipboard blocked.');
     });
 });

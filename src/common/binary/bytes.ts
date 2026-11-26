@@ -1,3 +1,12 @@
+// The bytes as an ArrayBuffer, such as for Web Crypto, without a copy when they already fill one.
+export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+    if (bytes.buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
+        return bytes.buffer;
+    }
+
+    return bytes.slice().buffer as ArrayBuffer;
+}
+
 // Whether two byte arrays hold the same bytes.
 export function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
     return left.length === right.length && left.every((byte, index) => byte === right[index]);

@@ -26,6 +26,22 @@ describe('tokenize', () => {
         expect(tokenize('"a\\"b" \'it\\\'s\'').slice(0, 2).map((token) => token.text)).toEqual(['a"b', 'it\'s']);
     });
 
+    it('reads a bracketed sheet name after from, and after from row in', () => {
+        expect(tokenize('from [North Region]')[1]).toMatchObject({ kind: 'identifier', text: 'North Region', quoted: true, start: 5, end: 19 });
+        expect(tokenize('FROM r IN [Q 1]')[3]).toMatchObject({ kind: 'identifier', text: 'Q 1', quoted: true });
+    });
+
+    it('keeps brackets anywhere else as punctuation', () => {
+        expect(tokenize('row["a"]').map((token) => token.text)).toEqual(['row', '[', 'a', ']', '']);
+        expect(tokenize('from * where a in [1]').filter((token) => token.kind === 'punct').map((token) => token.text)).toEqual(['*', '[', ']']);
+    });
+
+    it('rejects a bracketed sheet name that is never closed, or is empty', () => {
+        expect(() => tokenize('from [North\nwhere')).toThrow('This [sheet name] is never closed with a bracket.');
+        expect(() => tokenize('from [North')).toThrow('This [sheet name] is never closed with a bracket.');
+        expect(() => tokenize('from [ ]')).toThrow('A [sheet name] cannot be empty.');
+    });
+
     it('reads a backtick name as a quoted identifier', () => {
         const [token] = tokenize('`unit price`');
 

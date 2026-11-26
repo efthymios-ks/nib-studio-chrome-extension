@@ -1,3 +1,4 @@
+import { writeClipboardAsync } from '../app/clipboard.js';
 import type { DecodedImage } from '../../common/image/decodedImage.js';
 
 // Draws an image at its full size onto a canvas and encodes it as PNG, whatever format it came from.
@@ -50,12 +51,7 @@ export async function canvasToPngAsync(canvas: HTMLCanvasElement): Promise<Blob>
     });
 }
 
-// Puts a PNG on the clipboard. The ClipboardItem takes the promise itself, so the click that asked for the copy
-// still counts while the PNG is being encoded.
+// Puts a PNG on the clipboard; the click that asked for the copy still counts while the PNG is being encoded.
 export async function copyPngToClipboardAsync(png: Promise<Blob>): Promise<void> {
-    if (typeof ClipboardItem !== 'function' || navigator.clipboard?.write == null) {
-        throw new Error('This browser cannot put images on the clipboard.');
-    }
-
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    await writeClipboardAsync(png, { 'image/png': (blob) => blob });
 }

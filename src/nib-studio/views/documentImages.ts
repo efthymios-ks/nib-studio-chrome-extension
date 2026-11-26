@@ -5,6 +5,8 @@ import {
     type WorkspaceResources,
 } from '../../common/fs/workspaceResources.js';
 import { HEIC_NOT_DECODED_MESSAGE } from '../../common/image/imageFormat.js';
+import type { LocalImageContext } from '../../common/markdown/localImages.js';
+import { isExternalPath } from '../app/store.js';
 import { createWorkerImageDecoder, type DecodeImageAsync } from './imageDecodeClient.js';
 import { pixelsToPngAsync } from './imageClipboard.js';
 
@@ -45,4 +47,22 @@ export function createDocumentResources(
     options: Omit<WorkspaceResourceOptions, 'convertImageAsync'> = {},
 ): WorkspaceResources {
     return createWorkspaceResources(root, { ...options, convertImageAsync: createDocumentImageConverter() });
+}
+
+// Runs one render of the document at `path` with what it reads its workspace pictures through, released once it is done.
+// A file from outside the workspace, or any file with no workspace open, reads none, since its relative paths lead nowhere.
+export async function withDocumentImagesAsync<T>(
+    path: string,
+    root: FileSystemDirectoryHandle | null,
+    renderAsync: (context: LocalImageContext) => Promise<T>,
+): Promise<T> {
+    const documentPath = isExternalPath(path) ? null : path;
+    const resources = root == null || documentPath == null ? null : createDocumentResources(root);
+
+    try {
+        return await renderAsync({ documentPath, resources });
+    }
+    finally {
+        resources?.dispose();
+    }
 }

@@ -3,7 +3,7 @@ import { ensureSyntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import { runScopeHandlers } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createQueryEditorState, mountQueryEditor, type QueryEditorHandle } from './queryEditor.js';
+import { createQueryEditorState, mountQueryEditor, queryPlaceholder, type QueryEditorHandle } from './queryEditor.js';
 import { settleAsync } from '../testing/testHelpers.js';
 
 function tokensOf(state: EditorState): Array<[string, string]> {
@@ -203,5 +203,107 @@ describe('mountQueryEditor', () => {
         expect(labels).toContain('Key');
         expect(labels).toContain('total');
         expect(labels).not.toContain('where');
+    });
+
+    describe('in a workbook', () => {
+        const SHEETS = [
+            { name: 'Q1', hidden: false },
+            { name: 'Q2', hidden: false },
+            { name: 'North Region', hidden: false },
+            { name: 'Rates', hidden: true },
+        ];
+        const COLUMNS_BY_SHEET: Readonly<Record<string, string[]>> = {
+            'q1': ['order_id', 'total'],
+            'q2': ['order_id', 'total'],
+            'north region': ['customer', 'revenue'],
+        };
+
+        function mountWorkbook(text: string, sheets = SHEETS): QueryEditorHandle {
+            const handlers = {
+                completions: (query: string) => {
+                    const named = /from\s+(?:\w+\s+in\s+)?(?:\[([^\]]*)\]|'([^']*)'|(\w+))/i.exec(query);
+                    const sheet = (named?.[1] ?? named?.[2] ?? named?.[3] ?? 'Q1').toLowerCase();
+
+                    return { columns: COLUMNS_BY_SHEET[sheet] ?? [], sheets, allowsStar: sheets.length === 1 };
+                },
+            };
+            handle = mountQueryEditor({ parent, columns: [], handlers, initialText: text });
+            handle.view.dispatch({ selection: { anchor: text.length } });
+
+            return handle;
+        }
+
+        async function labelsAsync(editor: QueryEditorHandle): Promise<string[]> {
+            startCompletion(editor.view);
+            await settleAsync();
+
+            return currentCompletions(editor.view.state).map((completion) => completion.label);
+        }
+
+        it('suggests every sheet after from, quoting names with spaces, and no star when there are several', async () => {
+            const labels = await labelsAsync(mountWorkbook('from '));
+
+            expect(labels).toEqual(expect.arrayContaining(['Q1', 'Q2', "'North Region'", 'Rates']));
+            expect(labels).not.toContain('*');
+            expect(labels).not.toContain('where');
+        });
+
+        it('marks hidden sheets as such', async () => {
+            const editor = mountWorkbook('from ');
+            startCompletion(editor.view);
+            await settleAsync();
+
+            const rates = currentCompletions(editor.view.state).find((completion) => completion.label === 'Rates');
+            expect(rates?.detail).toBe('hidden sheet');
+        });
+
+        it('narrows sheets to what is typed, in the style it is typed in', async () => {
+            expect(await labelsAsync(mountWorkbook('from Nor'))).toEqual(["'North Region'"]);
+            handle?.destroy();
+            expect(await labelsAsync(mountWorkbook('from [Nor'))).toEqual(['[North Region]']);
+            handle?.destroy();
+            expect(await labelsAsync(mountWorkbook("from row in 'No"))).toEqual(["'North Region'"]);
+        });
+
+        it('applies the chosen sheet', async () => {
+            const editor = mountWorkbook('from [Nor');
+            startCompletion(editor.view);
+            await settleAsync();
+            runScopeHandlers(editor.view, new KeyboardEvent('keydown', { key: 'Enter' }), 'editor');
+
+            expect(editor.getText()).toBe('from [North Region]');
+        });
+
+        it('offers the star, or table after in, when the workbook has one sheet', async () => {
+            const single = [{ name: 'Data', hidden: false }];
+
+            expect(await labelsAsync(mountWorkbook('from ', single))).toEqual(expect.arrayContaining(['Data', '*']));
+            handle?.destroy();
+            expect(await labelsAsync(mountWorkbook('from row in ', single))).toEqual(expect.arrayContaining(['Data', 'table']));
+        });
+
+        it('suggests the columns of the sheet the query names', async () => {
+            const north = await labelsAsync(mountWorkbook("from 'North Region' where "));
+
+            expect(north).toContain('customer');
+            expect(north).not.toContain('order_id');
+            handle?.destroy();
+
+            const first = await labelsAsync(mountWorkbook('from Q2 where '));
+
+            expect(first).toContain('order_id');
+            expect(first).not.toContain('customer');
+        });
+    });
+
+    it('shows a placeholder for the source, and changes it', () => {
+        const editor = mount('');
+
+        expect(parent.querySelector('.cm-placeholder')?.textContent).toBe(queryPlaceholder('*'));
+        expect(queryPlaceholder('*')).toBe('from row in table\nwhere row.total > 100\nselect row');
+
+        editor.setPlaceholder(queryPlaceholder("'North Region'"));
+
+        expect(parent.querySelector('.cm-placeholder')?.textContent).toBe("from row in 'North Region'\nwhere row.total > 100\nselect row");
     });
 });

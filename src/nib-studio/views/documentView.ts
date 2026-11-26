@@ -13,6 +13,7 @@ import {
 } from '../../common/preview/metadataGroups.js';
 import { h } from '../app/dom.js';
 import { errorMessage } from '../../common/errorMessage.js';
+import { buildCopyButtons } from './copyButtons.js';
 import { createPictureUrls, renderDocBlocks } from './docBlocksView.js';
 import { createFindHighlighter, indexText, textNodesOf, type TextIndex } from './documentFind.js';
 import { createFindBox, matchSummary } from './findBox.js';
@@ -24,6 +25,7 @@ import { createPreviewFrame, type PreviewFrame } from './previewFrame.js';
 import type { PreviewHandle } from './previewHandle.js';
 import { BROWSER_CLOCK, type AnimationClock } from './previewZoomController.js';
 import { convertTiffPicturesAsync } from './tiffPictures.js';
+import { copyWordPageAsync, type WordPage } from './wordCopy.js';
 
 export interface DocumentPreviewOptions {
     readonly file: File;
@@ -66,10 +68,21 @@ interface ShownPage {
 }
 
 // A Word document (DOCX, DOC and their template and macro-enabled kinds) on a white page in the preview frame:
-// the wheel scrolls, Ctrl+wheel and the buttons zoom, Reset fits the page width, and Find highlights every match.
+// the wheel scrolls, Ctrl+wheel and the buttons zoom, Reset fits the page width, Find highlights every match,
+// and Copy formatted copies the page to paste with its formatting.
 export function mountDocumentPreview(host: HTMLElement, options: DocumentPreviewOptions): PreviewHandle {
     const clock = options.clock ?? BROWSER_CLOCK;
     const highlighter = createFindHighlighter();
+    // The document on the page, which Copy formatted copies; null until a page shows, and the button hidden till then.
+    let shownContent: WordPage | null = null;
+    const copyButton = buildCopyButtons([{
+        action: 'formatted',
+        title: 'Copy the document as shown, to paste with its headings, lists, tables and pictures',
+        copyAsync: async () => (shownContent == null
+            ? { message: 'The document is still opening.', tone: 'warn' }
+            : await copyWordPageAsync(shownContent)),
+    }]) as HTMLButtonElement;
+    copyButton.hidden = true;
     const frame = createPreviewFrame({
         memoryKey: options.memoryKey,
         typeLabel: 'Word',
@@ -78,6 +91,7 @@ export function mountDocumentPreview(host: HTMLElement, options: DocumentPreview
         fitMode: 'width',
         allowUpscaleOnFit: false,
         dragToPan: false,
+        actions: [copyButton],
         label: `Word preview of ${options.fileName}`,
         clock: options.clock,
         prefersReducedMotion: options.prefersReducedMotion,
@@ -151,6 +165,8 @@ export function mountDocumentPreview(host: HTMLElement, options: DocumentPreview
     const release = (): void => {
         shown?.dispose();
         shown = null;
+        shownContent = null;
+        copyButton.hidden = true;
         matches = [];
         matchIndex = -1;
         highlighter.clear();
@@ -211,6 +227,8 @@ export function mountDocumentPreview(host: HTMLElement, options: DocumentPreview
         }
 
         shown = page;
+        shownContent = view.content;
+        copyButton.hidden = false;
         frame.setNote(view.note);
         runFind(false);
         findRequested();
@@ -318,7 +336,7 @@ function buildPage(content: Exclude<WordContent, { kind: 'message' }>): BuiltPag
     element.style.padding = `${page.marginTop}px ${page.marginRight}px ${page.marginBottom}px ${page.marginLeft}px`;
 
     if (content.kind === 'html') {
-        // The HTML was sanitized when the document was read.
+        // The HTML was sanitised when the document was read.
         element.innerHTML = content.html;
     }
     else {

@@ -16,8 +16,7 @@ import { HIDDEN } from './liveItems.js';
 
 // What the Interactive view does with a range of the HTML source:
 // `tag` hides a tag, `marker` shows a list bullet or a table cell edge in its place,
-// `box` shows a labelled box
-// for a whole element, comment or doctype, `indent` hides a line's indentation,
+// `box` shows a labelled box for a whole element, comment or doctype, `indent` hides a line's indentation,
 // and `entity` and `image` show what an entity or an `<img>` stands for.
 export type HtmlItemKind = 'tag' | 'marker' | 'box' | 'indent' | 'entity' | 'image';
 

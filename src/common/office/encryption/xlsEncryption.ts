@@ -38,8 +38,7 @@ const ENCRYPTION_TYPES = Object.freeze({
 });
 
 // Once decrypted, FILEPASS becomes an InterfaceEnd record of the same length, which readers skip,
-// so every stream
-// position the workbook records stays right.
+// so every stream position the workbook records stays right.
 const FILE_PASS_STAND_IN = 0x00e2;
 
 interface WorkbookRecord {

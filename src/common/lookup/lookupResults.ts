@@ -1,5 +1,5 @@
 import { findMatches, type LookupCandidate, type LookupMatch, type MatchTarget, type TextRange } from './lookupMatcher.js';
-import { lineAt } from './lookupText.js';
+import { lineAt, sectionAt } from './lookupText.js';
 
 // What the Lookup list and preview show of each match. A name match highlights the name and has no preview;
 // a content match shows the flat text around its first match, with every match in view highlighted.
@@ -18,8 +18,10 @@ export interface LookupPreview {
     // Whether text comes before or after the part shown.
     readonly hasLead: boolean;
     readonly hasTail: boolean;
-    // The line the first match is on, counting from 1, for a text file; null for a document.
+    // The line the first match is on, counting from 1, for a text file; null for a document or a workbook.
     readonly line: number | null;
+    // The sheet of a workbook the first match is on, and its row there, counting from 1 as the sheet does.
+    readonly sheet: { readonly name: string; readonly row: number } | null;
     // The first match as the text has it, such as "Anna Smith" for the query "anna smith".
     readonly matchText: string;
 }
@@ -87,13 +89,17 @@ function previewOf(match: LookupMatch): LookupPreview | null {
         .filter((range) => range.end > start && range.start < end)
         .map((range) => ({ start: Math.max(range.start, start) - start, end: Math.min(range.end, end) - start }));
     const lineStarts = match.candidate.lineStarts;
+    const line = lineStarts == null ? null : lineAt(lineStarts, first.start);
+    const sections = match.candidate.sections ?? null;
+    const section = line == null || sections == null ? null : sectionAt(sections, line);
 
     return {
         text: text.slice(start, end),
         ranges,
         hasLead: start > 0,
         hasTail: end < text.length,
-        line: lineStarts == null ? null : lineAt(lineStarts, first.start),
+        line: sections == null ? line : null,
+        sheet: section == null ? null : { name: section.name, row: section.number },
         matchText: text.slice(first.start, Math.min(first.end, first.start + MATCH_TEXT_LENGTH)),
     };
 }

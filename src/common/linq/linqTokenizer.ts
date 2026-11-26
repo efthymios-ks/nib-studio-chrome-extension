@@ -10,7 +10,7 @@ export interface LinqToken {
     readonly end: number;
     // Set for numbers.
     readonly number?: number;
-    // True for a `backtick quoted` identifier, which is never a keyword.
+    // True for a `backtick quoted` identifier, or a [bracketed] sheet name, which is never a keyword.
     readonly quoted?: boolean;
 }
 
@@ -91,6 +91,12 @@ export function tokenize(text: string): LinqToken[] {
             continue;
         }
 
+        if (char === '[' && expectsSheetName(tokens)) {
+            tokens.push(readBracketedName(text, position));
+            position = (tokens[tokens.length - 1] as LinqToken).end;
+            continue;
+        }
+
         const punct = PUNCTUATION.find((candidate) => text.startsWith(candidate, position));
 
         if (punct == null) {
@@ -104,6 +110,39 @@ export function tokenize(text: string): LinqToken[] {
     tokens.push({ kind: 'eof', text: '', start: text.length, end: text.length });
 
     return tokens;
+}
+
+// A bracket right after `from`, or after `from row in`, opens a sheet name, as in `from [North Region]`;
+// anywhere else it indexes, as in `row["unit price"]`.
+function expectsSheetName(tokens: ReadonlyArray<LinqToken>): boolean {
+    const isWord = (token: LinqToken | undefined, word: string): boolean => token?.kind === 'identifier'
+        && token.quoted !== true
+        && token.text.toLowerCase() === word;
+    const last = tokens.length - 1;
+
+    if (isWord(tokens[last], 'from')) {
+        return true;
+    }
+
+    return isWord(tokens[last], 'in') && tokens[last - 1]?.kind === 'identifier' && isWord(tokens[last - 2], 'from');
+}
+
+// A sheet name in brackets holds any character but `]`, spaces included.
+function readBracketedName(text: string, start: number): LinqToken {
+    const close = text.indexOf(']', start + 1);
+    const lineEnd = text.indexOf('\n', start + 1);
+
+    if (close < 0 || (lineEnd >= 0 && lineEnd < close)) {
+        throw new LinqError('This [sheet name] is never closed with a bracket.', { start, end: lineEnd < 0 ? text.length : lineEnd });
+    }
+
+    const name = text.slice(start + 1, close);
+
+    if (name.trim() === '') {
+        throw new LinqError('A [sheet name] cannot be empty.', { start, end: close + 1 });
+    }
+
+    return { kind: 'identifier', text: name, start, end: close + 1, quoted: true };
 }
 
 function readNumber(text: string, start: number): LinqToken {

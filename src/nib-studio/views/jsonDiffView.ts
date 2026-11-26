@@ -5,7 +5,7 @@ import {
     type JsonDiffDocumentInput,
 } from '../../common/diff/jsonDiffDocument.js';
 import type { JsonArrayRule } from '../../common/json/jsonComparer.js';
-import { JSON_DATA_FORMAT, type DataFormat } from '../../common/json/jsonTree.js';
+import { isPlainObject, JSON_DATA_FORMAT, type DataFormat } from '../../common/json/jsonTree.js';
 import { YAML_DATA_FORMAT } from '../../common/yaml/yamlToJson.js';
 import type { JsonPathSegment } from '../../common/paths/jsonPathBuilder.js';
 import { clear, h } from '../app/dom.js';
@@ -365,10 +365,6 @@ function collectArrays(
     if (segment != null && isPlainObject(value) && Object.hasOwn(value, segment)) {
         collectArrays(value[segment], segments, position + 1, out);
     }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function parsedSides(input: JsonDiffViewInput): unknown[] {

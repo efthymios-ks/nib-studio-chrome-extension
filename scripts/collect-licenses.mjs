@@ -3,8 +3,8 @@ import { extname, join, relative } from 'node:path';
 
 // The third-party notices of a build: every package esbuild bundles, read from the build's metafiles,
 // and every package whose files the build copies, such as pdf.js's worker.
-// Each gets its version, its license and the full license text;
-// a shipped package without license text fails the build.
+// Each gets its version, its licence and the full licence text;
+// a shipped package without licence text fails the build.
 // They go to src/nib-studio/vendorLicenses.ts, which the About dialog lists,
 // and to THIRD_PARTY_NOTICES.txt in dist.
 
@@ -14,20 +14,20 @@ const NODE_MODULES = 'node_modules/';
 const SECTION_BREAK = '\n\n\n';
 const RULE = '='.repeat(80);
 
-// A license file is LICENSE, LICENCE or COPYING, in any case, with a suffix such as `.md` or `-MIT.txt`;
+// A licence file is LICENSE, LICENCE or COPYING, in any case, with a suffix such as `.md` or `-MIT.txt`;
 // a script such as cytoscape's license-update.mjs is not one.
 const LICENSE_FILE = /^(licen[cs]e|copying)/i;
 const NOTICE_FILE = /^notice/i;
 const TEXT_EXTENSIONS = new Set(['', '.md', '.markdown', '.txt', '.rst']);
 
-// What a package needs beyond its own license file, by package name:
-// - `license` names the license for a package whose package.json has none.
-// - `elected` is the license Nib Studio takes a dual-licensed package under,
+// What a package needs beyond its own licence file, by package name:
+// - `license` names the licence for a package whose package.json has none.
+// - `elected` is the licence Nib Studio takes a dual-licensed package under,
 // `offered` the choice its package.json gives,
-//   and `file` the license file that holds the elected text when the package ships more than one.
-// - `parts` are licenses of code the package ships inside its own files, each from a file of the package,
+//   and `file` the licence file that holds the elected text when the package ships more than one.
+// - `parts` are licences of code the package ships inside its own files, each from a file of the package,
 //   by `path`, or from another package, by `package`.
-// - `statement` says where the source is and how the package ships, as its license asks.
+// - `statement` says where the source is and how the package ships, as its licence asks.
 const PACKAGE_RULES = Object.freeze({
     'dompurify': {
         elected: 'Apache-2.0',
@@ -87,7 +87,7 @@ export function packageDirectoryOf(path) {
 }
 
 // `dompurify` for `node_modules/mermaid/node_modules/dompurify`.
-export function packageNameOf(directory) {
+function packageNameOf(directory) {
     return directory.slice(directory.lastIndexOf(NODE_MODULES) + NODE_MODULES.length);
 }
 
@@ -113,7 +113,7 @@ function isTextFile(fileName) {
     return TEXT_EXTENSIONS.has(extname(fileName).toLowerCase());
 }
 
-// The license file of a package, the shortest name first, so `LICENSE` wins over `LICENSE-MPL`;
+// The licence file of a package, the shortest name first, so `LICENSE` wins over `LICENSE-MPL`;
 // null when there is none.
 export function pickLicenseFile(fileNames) {
     const candidates = fileNames
@@ -130,7 +130,7 @@ export function pickNoticeFiles(fileNames) {
         .sort();
 }
 
-// The license of a package.json: the `license` string, an old `license` object, or the `licenses` list.
+// The licence of a package.json: the `license` string, an old `license` object, or the `licenses` list.
 export function manifestLicense(manifest) {
     if (typeof manifest.license === 'string') {
         return manifest.license;
@@ -155,7 +155,7 @@ export function compareNotices(left, right) {
 }
 
 // Unix line breaks, without blank lines at either end; the first line keeps its indent,
-// as license headings have one.
+// as licence headings have one.
 function normalizeText(text) {
     return text
         .replace(/\r\n?/g, '\n')
@@ -189,7 +189,7 @@ async function resolvePackageDirectoryAsync(rootDirectory, fromDirectory, name) 
     return null;
 }
 
-// The license text of a package folder, from its own files or, for one that ships none, from vendor/licenses.
+// The licence text of a package folder, from its own files or, for one that ships none, from vendor/licenses.
 async function readLicenseTextAsync(rootDirectory, directory, preferredFile) {
     const name = packageNameOf(directory);
     const folders = [join(rootDirectory, directory), join(rootDirectory, 'vendor', 'licenses', name)];
@@ -222,7 +222,7 @@ async function readPartAsync(rootDirectory, directory, part) {
 }
 
 // One package's notice;
-// `text` is null when the package ships no license text and vendor/licenses has none for it.
+// `text` is null when the package ships no licence text and vendor/licenses has none for it.
 async function readNoticeAsync(rootDirectory, directory) {
     const name = packageNameOf(directory);
     const rule = PACKAGE_RULES[name] ?? {};
@@ -270,7 +270,7 @@ async function readNoticeAsync(rootDirectory, directory) {
 
 // The notices of every package the bundles take code from and of every package whose files are copied,
 // sorted.
-// Throws when a shipped package has no license text, naming each one.
+// Throws when a shipped package has no licence text, naming each one.
 export async function collectNoticesAsync({ rootDirectory, metafiles, copiedPaths }) {
     const copied = copiedPaths.map((path) => packageDirectoryOf(relative(rootDirectory, path))).filter((directory) => directory != null);
     // A package reached through a linked node_modules folder, as esbuild reports it by its real path,
@@ -303,7 +303,7 @@ export async function collectNoticesAsync({ rootDirectory, metafiles, copiedPath
     return notices.sort(compareNotices);
 }
 
-// THIRD_PARTY_NOTICES.txt: the list of packages, then each one's license text in full.
+// THIRD_PARTY_NOTICES.txt: the list of packages, then each one's licence text in full.
 export function buildNoticesText(notices) {
     const unit = notices.length === 1 ? 'package' : 'packages';
     const header = [
@@ -337,7 +337,7 @@ function quote(value) {
     return `'${value.replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`;
 }
 
-// The vendorLicenses.ts source. A license text two or more packages share is written once, as a constant.
+// The vendorLicenses.ts source. A licence text two or more packages share is written once, as a constant.
 export function buildTypeScriptSource(notices) {
     const uses = new Map();
 

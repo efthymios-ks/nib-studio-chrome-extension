@@ -113,18 +113,18 @@ Commands that don't apply are left out of the menu; dividers separate the groups
 | Delete | `Del` | one or more items selected | deletes them after confirmation |
 | Copy name to clipboard | | one item selected | copies `orders.json` |
 | Copy path to clipboard | | one item selected | copies `data/orders.json` |
-| Copy content to clipboard | | one text file selected | copies its text; over 10 MB asks first |
+| Copy content to clipboard | | one text file selected | copies its text, as its tab holds it when it is open, or else as saved on disk, up to 64 MB; over 10 MB asks first |
 | Format JSON | | a JSON file | reformats it with 2-space indent, unsaved |
 | Format YAML | | a YAML file | reformats it with 2-space indent, keeping its comments, unsaved |
 | Convert XML to JSON | | an XML file in the workspace | opens the JSON in a new tab `name.xml.converted.json` |
 | Convert YAML to JSON | | a YAML file in the workspace | opens the JSON in a new tab `name.yaml.converted.json` |
 | Convert JSON to YAML | | a JSON file in the workspace | opens the YAML in a new tab `name.json.converted.yaml` |
-| Compare XML with… | | an XML file | opens its diff view and asks for the other file on disk |
+| Compare XML with… | | an XML file | asks for the other file on disk and opens the diff in a new diff tab |
 | Save pages… | | one PDF selected | asks which pages, previews them and saves them as a new PDF beside it; see [Documents](Documents.md#save-pages) |
 | Refresh | | a workspace is open | rereads the tree from disk |
 
 **Compare with…** shows as a header with its choices under it:
-**Compare with clipboard**, **Compare with a file…**, and **Compare with open tab: name** for each other open file tab.
+**Compare with clipboard**, **Compare with a file…**, and **Compare with open tab: name** for each other open file tab that holds text.
 
 With more than one item selected, the menu shows only the commands that act on a selection:
 **Compare these two files** when exactly two comparable files are selected, **Delete** and **Refresh**.  
@@ -132,7 +132,7 @@ With more than one item selected, the menu shows only the commands that act on a
 Two JSON, YAML, XML, Markdown, CSV or TSV files, or any two text files of one type, compare; workbooks don't.  
 **Compare with…** is left out for a file that opens only as a preview, and for an open file that isn't text.
 A file of an unknown type that isn't open is read first, as opening it would be:
-when it isn't text, **Compare with clipboard** and **Compare with a file…** stop with the toast `name can't be compared: it isn't text.`
+when it isn't text, each **Compare with…** choice stops with the toast `name can't be compared: it isn't text.`
 A file picked from disk is checked the same way before it is read,
 and one that opens only as a preview, such as a PNG, gets `name can't be compared: it opens only as a preview.`
 
@@ -209,10 +209,10 @@ it lists, and moves or copies, only the items from elsewhere.
   **Keep both** gives the moved item a free name such as `name-copy.ext`.
   Closing the clash dialog cancels the whole move.
 - **Copy** copies the items, renaming copies that clash to `name-copy.ext`, `name-copy-2.ext`, and so on.
-- `×` or `Esc` cancels.
+- `×`, `Esc` or a click outside cancels.
 
 Open tabs of moved files, and of files inside moved folders, follow them to the new path.  
-The File System Access API has no move across folders, so a move is a copy followed by a delete.  
+A move to another folder is a copy followed by a delete.  
 Moves and copies copy the file's bytes, so binary files such as `.xlsx`, `.docx` or images arrive intact.
 
 ## Drop from the desktop
@@ -271,8 +271,10 @@ At 720 px wide or less the Explorer leaves the layout and becomes a drawer:
 
 - The `›` strip at the left edge opens it over the editor, up to 320 px wide.
 - **Look up files…** sits at the top of the drawer, and its results take the drawer's width.
-- `×` in the Explorer header, `Esc`, or a tap on the dimmed editor closes it.
-  `Esc` in **Look up files…** only clears the box.
+- `×` in the Explorer header, `Esc`, or a tap on the dimmed editor closes it,
+  and so does opening a file from the tree or from **Look up files…**.
+  `Esc` in **Look up files…** never closes it: it clears the box,
+  or, when the box is empty, gives the keyboard to the tree.
 - The stored desktop width and hidden state don't apply; widening the window closes the drawer and brings the desktop layout back.
 - On touch screens, press and hold a row or a tab to open its context menu; rows are not draggable there,
   so the hold isn't taken for a drag.
@@ -294,4 +296,4 @@ A click on a link to a workspace file in a Markdown or HTML preview reveals the 
 A link to a folder opens it and its parent folders, selects it and scrolls it into view,
 and brings the Explorer into view as **Reveal in Explorer** does:
 a hidden Explorer comes back at its last width, and at 720 px wide or less the Explorer slides in as the drawer.  
-See [Markdown](Markdown.md#links).
+See [Markdown](Markdown.md#links-1).

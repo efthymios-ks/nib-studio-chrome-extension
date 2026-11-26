@@ -2,6 +2,7 @@ import { parseJson } from '../../common/json/jsonTree.js';
 import { parseXml } from '../../common/paths/xmlParser.js';
 import { parseYamlAsJson } from '../../common/yaml/yamlToJson.js';
 import { normalizeLineEndings } from '../../common/text/lineEndings.js';
+import { readClipboardTextAsync } from '../app/clipboardPaste.js';
 import { DIFF_KIND_LABELS, DIFF_KINDS, pastedSide } from '../app/diffTabs.js';
 import { clear, h } from '../app/dom.js';
 import type { DiffKind, DiffSide, DiffTab } from '../app/store.js';
@@ -236,24 +237,11 @@ function attachSideActions(options: SideActionOptions): void {
 }
 
 async function pasteClipboardAsync(onText: (text: string) => void): Promise<void> {
-    let text: string;
+    const text = await readClipboardTextAsync(navigator.clipboard);
 
-    try {
-        text = await navigator.clipboard.readText();
+    if (text != null) {
+        onText(text);
     }
-    catch {
-        toast('Could not read clipboard.', 'fail');
-
-        return;
-    }
-
-    if (text === '') {
-        toast('The clipboard has no text.', 'warn');
-
-        return;
-    }
-
-    onText(text);
 }
 
 interface ChooseSideOptions {

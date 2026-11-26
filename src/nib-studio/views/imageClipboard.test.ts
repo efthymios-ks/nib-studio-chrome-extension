@@ -22,13 +22,14 @@ describe('copyPngToClipboardAsync', () => {
 
         expect(write).toHaveBeenCalledTimes(1);
         expect(Object.keys(items[0] ?? {})).toEqual(['image/png']);
-        expect(items[0]?.['image/png']).toBe(png);
+        expect(items[0]?.['image/png']).toBeInstanceOf(Promise);
+        expect(await items[0]?.['image/png']).toBe(await png);
     });
 
     it('says so when the browser cannot put images on the clipboard', async () => {
         vi.stubGlobal('ClipboardItem', undefined);
 
-        await expect(copyPngToClipboardAsync(Promise.resolve(new Blob()))).rejects.toThrow(/cannot put images/);
+        await expect(copyPngToClipboardAsync(Promise.resolve(new Blob()))).rejects.toThrow('This browser cannot copy to the clipboard.');
     });
 });
 

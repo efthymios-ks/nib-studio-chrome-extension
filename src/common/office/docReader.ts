@@ -69,7 +69,7 @@ export const WORD_PROBLEM_TITLES: Readonly<Record<DocProblem, string>> = Object.
 });
 
 // The title of an encrypted document whose encryption the preview can't open.
-export const UNSUPPORTED_ENCRYPTION_TITLE = 'This document\'s encryption isn\'t supported';
+const UNSUPPORTED_ENCRYPTION_TITLE = 'This document\'s encryption isn\'t supported';
 
 const PASSWORD_MESSAGE = 'Enter its password to open it.';
 

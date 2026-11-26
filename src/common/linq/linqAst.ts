@@ -96,9 +96,17 @@ export type LinqClause =
     | { readonly kind: 'skip'; readonly count: LinqExpression; readonly span: LinqSpan }
     | { readonly kind: 'take'; readonly count: LinqExpression; readonly span: LinqSpan };
 
+// The table a query reads: the open table, written `*` or `table`, or a sheet of a workbook named as in `from Q2`.
+export interface LinqSourceRef {
+    // The sheet's name as written, without its quotes or brackets; null for the open table.
+    readonly sheet: string | null;
+    readonly span: LinqSpan;
+}
+
 export interface LinqQuery {
     // The range variable of `from x in table`, or null for `from *`.
     readonly rangeVariable: string | null;
+    readonly source: LinqSourceRef;
     readonly clauses: ReadonlyArray<LinqClause>;
     readonly span: LinqSpan;
 }

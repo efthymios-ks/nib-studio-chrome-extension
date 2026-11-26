@@ -2,9 +2,9 @@ import DOMPurify, { type Config } from 'dompurify';
 
 const MAX_PASSES = 16;
 
-// Sanitizes with DOMPurify until the result stops changing. Chrome is done after one pass and confirms it with a second;
+// Sanitises with DOMPurify until the result stops changing. Chrome is done after one pass and confirms it with a second;
 // DOM implementations whose node iterator skips the node after a removed one need a pass per skipped node.
-// Without a DOM to sanitize in, or if the result never settles, it returns an empty string and shows nothing.
+// Without a DOM to sanitise in, or if the result never settles, it returns an empty string and shows nothing.
 export function purifyHtml(html: string, config: Config): string {
     if (!DOMPurify.isSupported) {
         return '';

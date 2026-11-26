@@ -42,6 +42,8 @@ export interface DiffDocumentSide {
     readonly source: DiffSourceKind;
     // Workspace path, or the file name of a file from disk; absent for text with no file.
     readonly path?: string;
+    // The sheet compared, for a workbook.
+    readonly sheet?: string;
 }
 
 export interface DiffSummary {

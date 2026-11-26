@@ -39,7 +39,7 @@ const LANGUAGE_PATTERN = /(?:^|\s)(?:lang|language|highlight-source)-([\w#+-]+)/
 const LIST_MARKER_TEXT = /^\s*(?:\d+|[a-z]{1,4})[.)]\s*$/i;
 
 // Converts clipboard HTML, such as a web page, Word or Google Docs selection, to Markdown.
-// The HTML is sanitized and read in an inert document, so nothing in it runs or loads.
+// The HTML is sanitised and read in an inert document, so nothing in it runs or loads.
 // Returns null when the HTML has no formatting to keep, or looks like a code editor's copy,
 // so plain text is better.
 export function htmlToMarkdown(html: string): string | null {
@@ -412,7 +412,7 @@ function convertImage(element: Element): string {
 }
 
 // A relative address or one with a web, mail or phone scheme; for images also inline `data:` images.
-// Checked as well as sanitized, so a `javascript:` address never reaches the Markdown.
+// Checked as well as sanitised, so a `javascript:` address never reaches the Markdown.
 function isSafeUrl(url: string, isImage: boolean): boolean {
     const compact = url.replace(/[\u0000- ]/g, '');
     const scheme = /^([a-z][a-z\d+.-]*):/i.exec(compact)?.[1]?.toLowerCase();

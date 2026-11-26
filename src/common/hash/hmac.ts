@@ -1,4 +1,4 @@
-import { toArrayBuffer } from './hash.js';
+import { toArrayBuffer } from '../binary/bytes.js';
 
 export type HmacAlgorithm = 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512';
 

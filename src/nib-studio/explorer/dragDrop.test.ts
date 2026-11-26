@@ -37,6 +37,12 @@ describe('detectCollisions', () => {
         expect(collisions[0]?.targetPath).toBe('dist/a.ts');
     });
 
+    it('finds a name that differs only in case, naming the entry already there', () => {
+        const collisions = detectCollisions(['src/Notes.md'], 'docs', new Set(['notes.md', 'other.md']));
+
+        expect(collisions).toEqual([{ sourcePath: 'src/Notes.md', targetPath: 'docs/notes.md', name: 'Notes.md' }]);
+    });
+
     it('builds a root-relative target path when target folder is empty', () => {
         const collisions = detectCollisions(
             ['src/a.ts'],

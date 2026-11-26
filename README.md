@@ -2,14 +2,17 @@
 
 A Chromium extension to write, compare and inspect files, fully offline.  
 Pick a folder on your disk, or drop files onto the studio, and work on them in a browser tab:
-edit text, JSON, YAML, XML and Markdown,
+edit text, JSON, YAML, XML, Markdown and HTML,
+preview HTML pages with their own scripts running in a sandbox, with no network,
 query JSON and YAML with JSONPath and XML with XPath,
 format YAML and convert it to and from JSON,
 validate JSON against a schema, generate a schema from it or build a sample from one,
 compare any two files or texts side by side in diff tabs and export the diff as JSON or HTML,
-view and query CSV and Excel files,
+view and query CSV and Excel files, every sheet of a workbook included,
 and preview Word documents, PDFs, images, TIFF included, audio, video and fonts.  
 HEIC photos aren't decoded, so a HEIC shows its details only.  
+**Paste from clipboard** opens what is on the clipboard in a tab of its own,
+and **Copy raw**, **Copy formatted** or **Copy content** on a file's toolbar copies its text or what it renders as.  
 **Lookup** finds files by name and by content as you type, inside Word, Excel, PowerPoint and PDF files too.  
 Hash, HMAC, checksum, encoding and JWT tools sit one tab away.  
 No host permissions, no network access; everything stays on the machine.  
@@ -26,7 +29,8 @@ Click the toolbar icon to open the studio; the interface is in English.
   how it matches and ranks, the preview, what it reads, and protected files
 - [Editor](docs/Editor.md): preview and permanent tabs, view tabs per file type, the editor bar with undo and redo,
   saving, line endings and text encodings, keys, undo across views,
-  drop to open and tabs of files from outside the workspace, the HTML preview
+  drop to open and tabs of files from outside the workspace, the HTML preview with the page's scripts in a sandbox,
+  the copy buttons and Paste from clipboard
 - [JSON](docs/Json.md): tree with a JSONPath path bar, format and minify, JSONPath results, schema validate, generate and sample
 - [YAML](docs/Yaml.md): validator, format that keeps comments, tree, JSONPath and schema views,
   conversion rules, Convert YAML to JSON and JSON to YAML, the structural diff
@@ -37,7 +41,8 @@ Click the toolbar icon to open the studio; the interface is in English.
   HTML and PDF export
 - [Compare](docs/Compare.md): diff tabs, Compare with…, the diff bar, text, JSON with array rules, YAML, XML, Markdown and row diffs,
   JSON and HTML exports
-- [Tables](docs/Tables.md): CSV, TSV and Excel grids with sort, filters, search, columns, queries and large-file streaming
+- [Tables](docs/Tables.md): CSV, TSV and Excel grids with sheet tabs, sort, filters, search, columns, queries
+  and large-file streaming
 - [Documents](docs/Documents.md): Word preview of DOCX and `.doc` files with zoom, find, passwords and the Info panel,
   PDF preview with zoom, Fit page, a page box, Save pages, find, selectable text, passwords and the Info panel
 - [Preview](docs/Preview.md): images, TIFF included, audio, video and fonts, with zoom, Copy image and the Info panel,
@@ -83,13 +88,14 @@ and `npm ci` runs when `node_modules` is missing or older than `package-lock.jso
 Then it type-checks `src` and runs Vitest over the co-located `*.test.ts` files under `src`
 and the build scripts' `*.test.mjs` files under `scripts`.  
 `Start-Debug.ps1` and `Publish-Extension.ps1` go through the same install step.  
-Exit codes: `0` passed, `1` type errors or failures, `2` no tests discovered, `3` Node.js or the npm packages unavailable.
+Exit codes: `0` passed, `1` type errors or failures, `2` a test path not found, `3` Node.js or the npm packages unavailable.
 
 With Node.js and the packages in place, `npm test` (or `npx vitest run`) runs the same suite directly.  
 `vitest.config.ts` splits it into two projects:
 `logic` runs `src/common`, `src/background` and the `scripts/*.test.mjs` files under Node,
 and `studio` runs `src/nib-studio` under happy-dom.  
 Run one with `npx vitest run --project studio`.  
+A `src/common` test that builds HTML asks for happy-dom in its first line, `// @vitest-environment happy-dom`.  
 Tests that touch the disk use the in-memory File System Access fake in `src/common/fs/testing/fakeFileSystem.ts`,
 so no test reads or writes real files.  
 Drops from the desktop use the `DataTransfer` fake in `src/nib-studio/testing/fakeDataTransfer.ts`,
@@ -97,7 +103,7 @@ which empties its items once the drop event is over, as the browser does.
 
 | Parameter | Meaning |
 | --- | --- |
-| `-Path` | Test folder or file. Default `.\src`. |
+| `-Path` | Test folders or files, as a list or comma-separated. Default `.\src` and `.\scripts`. |
 | `-TestName` | Only tests whose name contains this text, or matches it as a regex. |
 | `-Output` | `None`, `Normal` or `Detailed`. Default `Detailed`. |
 | `-ResultPath` | Also write JUnit XML to this path. |
@@ -126,7 +132,7 @@ powershell -File .\Start-Debug.ps1 -NoWatch
 | `-Browser` | `Chrome`, `Edge` or `Chromium`. Default `Chrome`. |
 | `-BrowserPath` | Explicit executable, for example Chrome for Testing. |
 | `-ProfilePath` | Browser profile. Default `.debug-profile`. |
-| `-NoWatch` | Build once and return. |
+| `-NoWatch` | Build once, open the browser and return. |
 
 ## Build and package
 
@@ -178,7 +184,8 @@ See [Release](docs/Release.md) for the full checklist, offline sources, SheetJS 
 Zips every file git would commit, under one `nib-studio-chrome-extension` folder, and replaces the previous zip.  
 Deletes nothing.  
 Without git, it leaves out the same folders by name.  
-Like every script here, it runs on Windows PowerShell 5.1, so a double-click from Explorer works.
+Like every script here, it runs on Windows PowerShell 5.1,
+so right-clicking it in Explorer and choosing **Run with PowerShell** works.
 
 ## Licence
 

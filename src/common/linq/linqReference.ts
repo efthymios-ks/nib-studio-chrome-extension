@@ -1,8 +1,7 @@
 import { LINQ_AGGREGATES, LINQ_FUNCTIONS, LINQ_METHODS, LINQ_PROPERTIES } from './linqFunctions.js';
-import { LINQ_KEYWORDS } from './linqParser.js';
+import { isBareName, isLinqKeyword } from './linqParser.js';
+import { quoteSheetName } from './linqSheets.js';
 import { inferColumnTypes, type LinqColumnType } from './linqValues.js';
-
-const RESERVED = new Set(LINQ_KEYWORDS);
 
 export interface LinqReferenceEntry {
     // How it is written, like `where condition`.
@@ -67,7 +66,7 @@ function callExample(key: string): string {
 export const LINQ_REFERENCE: ReadonlyArray<LinqReferenceSection> = [
     {
         title: 'Source',
-        intro: 'Every query starts with from and reads the open table. Keywords ignore case.',
+        intro: 'Every query starts with from and reads the open table, or one sheet of a workbook. Keywords ignore case.',
         entries: [
             {
                 syntax: 'from row in table',
@@ -76,8 +75,24 @@ export const LINQ_REFERENCE: ReadonlyArray<LinqReferenceSection> = [
             },
             {
                 syntax: 'from *',
-                description: 'No row name; read columns by name, like total. from table means the same.',
+                description: 'No row name; read columns by name, like total. from table means the same. '
+                    + 'A workbook with more than one sheet needs the sheet named instead.',
                 example: 'from * where total > 100',
+            },
+            {
+                syntax: 'from Q2',
+                description: 'Reads the sheet Q2 of a workbook; sheet names ignore case.',
+                example: 'from Q2 where total > 100',
+            },
+            {
+                syntax: 'from row in Q2',
+                description: 'Names each row of the sheet Q2.',
+                example: 'from row in Q2 where row.total > 100',
+            },
+            {
+                syntax: "from 'North Region', from [North Region]",
+                description: 'A sheet whose name has spaces or other characters, or is a keyword, goes in quotes or brackets.',
+                example: "from 'North Region' take 20",
             },
         ],
     },
@@ -195,13 +210,77 @@ export const LINQ_REFERENCE: ReadonlyArray<LinqReferenceSection> = [
     },
 ];
 
+// The Source section for a workbook, built from its own sheet names, in place of the general one.
+export function buildSheetSourceReference(sheets: ReadonlyArray<string>): LinqReferenceSection {
+    const general = LINQ_REFERENCE[0] as LinqReferenceSection;
+    const first = sheets[0];
+
+    if (first == null) {
+        return general;
+    }
+
+    const written = quoteSheetName(first);
+    const rowEntry = general.entries[0] as LinqReferenceEntry;
+    const odd = sheets.find((name) => quoteSheetName(name) !== name);
+    const entries: LinqReferenceEntry[] = [
+        {
+            syntax: `from ${written}`,
+            description: `Reads the sheet ${first}; read columns by name, like total. Sheet names ignore case.`,
+            example: `from ${written} take 20`,
+        },
+        {
+            syntax: `from row in ${written}`,
+            description: rowEntry.description,
+            example: `from row in ${written} take 20`,
+        },
+    ];
+
+    if (odd != null) {
+        entries.push({
+            syntax: `from ${quoteSheetName(odd)}, from [${odd}]`,
+            description: 'A sheet whose name has spaces or other characters, or is a keyword, goes in quotes or brackets.',
+            example: `from ${quoteSheetName(odd)} take 20`,
+        });
+    }
+
+    entries.push(sheets.length === 1
+        ? { syntax: 'from *', description: `Reads ${first}, the only sheet; from table means the same.`, example: 'from * take 20' }
+        : { syntax: 'from *', description: 'Not in a workbook with more than one sheet: name the sheet instead.', example: `from ${written} take 20` });
+
+    const names = sheets.map(quoteSheetName).join(', ');
+
+    return {
+        title: 'Source',
+        intro: sheets.length === 1
+            ? `This workbook has one sheet, ${written}. Keywords ignore case.`
+            : `This workbook has ${sheets.length} sheets: ${names}. Every query names the one it reads. Keywords ignore case.`,
+        entries,
+    };
+}
+
 export interface LinqExampleQuery {
     readonly title: string;
     readonly query: string;
 }
 
 // Ready-made queries built from the table's own columns and the types of a few sample rows.
-export function buildExampleQueries(columns: ReadonlyArray<string>, sampleRows: ReadonlyArray<ReadonlyArray<unknown>>): LinqExampleQuery[] {
+// `source` is what follows from: `*` for the open table, or a sheet's name as a query writes it.
+export function buildExampleQueries(
+    columns: ReadonlyArray<string>,
+    sampleRows: ReadonlyArray<ReadonlyArray<unknown>>,
+    source = '*',
+): LinqExampleQuery[] {
+    return buildTableExamples(columns, sampleRows).map((example) => ({
+        title: example.title,
+        query: source === '*'
+            ? example.query
+            : example.query
+                .replace(/^from \*/u, `from ${source}`)
+                .replace(/^from row in table/u, `from row in ${source}`),
+    }));
+}
+
+function buildTableExamples(columns: ReadonlyArray<string>, sampleRows: ReadonlyArray<ReadonlyArray<unknown>>): LinqExampleQuery[] {
     const types = inferColumnTypes(columns.length, sampleRows);
     const pick = (type: LinqColumnType, skip: ReadonlyArray<string> = []): string | null => {
         const index = types.findIndex((candidate, position) => candidate === type && !skip.includes(columns[position] ?? ''));
@@ -252,7 +331,7 @@ export function buildExampleQueries(columns: ReadonlyArray<string>, sampleRows: 
 
 // A column name as it can be written bare, or in backticks when it is not a plain word.
 export function quoteName(name: string): string {
-    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !RESERVED.has(name.toLowerCase()) ? name : `\`${name}\``;
+    return isBareName(name) ? name : `\`${name}\``;
 }
 
 function unquote(name: string): string {
@@ -265,6 +344,6 @@ function titleCase(name: string): string {
 
     const title = word.charAt(0).toUpperCase() + word.slice(1);
 
-    return RESERVED.has(title.toLowerCase()) ? `${title}Value` : title;
+    return isLinqKeyword(title) ? `${title}Value` : title;
 }
 

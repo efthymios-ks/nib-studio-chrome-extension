@@ -160,13 +160,32 @@ describe('createLookupBox', () => {
         fake.emit({ kind: 'results', results: results('anna', [result('notes.txt', {
             target: 'content',
             tier: 3,
-            preview: { text: 'Customer: Anna Smith', ranges: [{ start: 10, end: 14 }], hasLead: true, hasTail: true, line: 12, matchText: 'Anna' },
+            preview: { text: 'Customer: Anna Smith', ranges: [{ start: 10, end: 14 }], hasLead: true, hasTail: true, line: 12, sheet: null, matchText: 'Anna' },
         })]) });
 
         expect(document.querySelector('.lookup-preview-line')?.textContent).toBe('Line 12');
         expect(document.querySelector('.lookup-preview-text')?.textContent).toBe('…Customer: Anna Smith…');
         expect(document.querySelector('.lookup-preview-text .lookup-mark')?.textContent).toBe('Anna');
         expect(document.querySelector('.lookup-row .lookup-mark')).toBeNull();
+    });
+
+    it('names the sheet and row of a match in a workbook', async () => {
+        await typeAsync('ironworks');
+        fake.emit({ kind: 'results', results: results('ironworks', [result('data/sales.xlsx', {
+            target: 'content',
+            tier: 3,
+            preview: {
+                text: 'Thessaly Ironworks Larissa 5400',
+                ranges: [{ start: 9, end: 18 }],
+                hasLead: false,
+                hasTail: false,
+                line: null,
+                sheet: { name: 'North Region', row: 1203 },
+                matchText: 'Ironworks',
+            },
+        })]) });
+
+        expect(document.querySelector('.lookup-preview-line')?.textContent).toBe('North Region · row 1,203');
     });
 
     it('ignores the results of a query no longer in the box', async () => {

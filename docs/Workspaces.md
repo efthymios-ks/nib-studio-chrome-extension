@@ -1,7 +1,8 @@
 # Workspaces
 
 A workspace is a real folder on disk, opened through the browser's File System Access API.  
-Nib Studio reads and writes files only inside the workspaces you pick; it has no storage of its own for files.
+Nib Studio reads and writes files only inside the workspaces you pick,
+and outside them only the files you drop, pick or save to yourself; it has no storage of its own for files.
 
 ## Open a folder
 
@@ -56,13 +57,14 @@ Every folder you open is remembered, so you can come back to it without the pick
 
 - The folder handles live in the studio's IndexedDB, under `nib-studio/workspace/<id>`,
   with the active one under `nib-studio/workspace-active`.
-- The id is the folder name in lower case plus a time stamp, such as `reports-m3k9x2`.
+- The id is the folder name in lower case, with a hyphen for each run of characters other than `a` to `z` and `0` to `9`,
+  plus a time stamp in base 36, such as `reports-mwxmdbrb`.
 - The switcher lists every remembered workspace by folder name, with `(active)` after the open one.
 
 | Switcher item | Effect |
 | --- | --- |
 | a workspace name | switches to it, settling [unsaved changes](#unsaved-changes) first |
-| No recent workspaces | shown, greyed out, when the list is empty |
+| No recent workspaces | shown when the list is empty, as a line that can't be picked |
 | Open folder… | opens the folder picker, then settles [unsaved changes](#unsaved-changes) before opening the folder |
 | Forget "name" | removes it from the list after confirmation; files on disk are not touched |
 

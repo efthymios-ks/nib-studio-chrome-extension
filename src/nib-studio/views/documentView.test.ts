@@ -10,6 +10,8 @@ import {
 } from '../../common/office/testing/encryptionFixtures.js';
 import { BLIP, blip, picf, shape, TINY_PNG } from '../../common/office/testing/officeArtFixtures.js';
 import { setClientSize } from '../testing/fakeAnimationClock.js';
+import { stubClipboard } from '../testing/fakeClipboard.js';
+import { settleAsync, toastTexts } from '../testing/testHelpers.js';
 import { FIND_CURRENT_HIGHLIGHT, FIND_HIGHLIGHT } from './documentFind.js';
 import { markBoldHeaderRows, mountDocumentPreview } from './documentView.js';
 import { matchSummary } from './findBox.js';
@@ -133,6 +135,29 @@ afterEach(() => {
 });
 
 describe('mountDocumentPreview', () => {
+    it('copies the page on screen with its formatting from Copy formatted, which waits for the page', async () => {
+        const clipboard = stubClipboard();
+
+        try {
+            mount(docFile());
+            const copyButton = host.querySelector<HTMLButtonElement>('[data-action="copy-formatted"]') as HTMLButtonElement;
+            expect(copyButton.hidden).toBe(true);
+            await readyAsync();
+            expect(copyButton.hidden).toBe(false);
+
+            copyButton.click();
+            await settleAsync();
+
+            expect(clipboard.last().get('text/html')).toMatch(/<table[^>]* border="1"/);
+            expect(clipboard.last().get('text/html')).not.toContain('<script');
+            expect(clipboard.last().get('text/plain')).toBe('Legacy body\n\nName\tTotal\nAda\t42');
+            expect(toastTexts().at(-1)).toBe('Formatted document copied.');
+        }
+        finally {
+            clipboard.restore();
+        }
+    });
+
     it('builds one toolbar row: the Word badge, zoom, Info and View only, with Find in the controls bar below', async () => {
         mount(await docxFileAsync(paragraphs('Hello')));
         await readyAsync();
@@ -142,7 +167,7 @@ describe('mountDocumentPreview', () => {
 
         expect(host.querySelectorAll('.editor-toolbar')).toHaveLength(1);
         expect([...toolbar.querySelectorAll('.badge')].map((badge) => badge.textContent)).toEqual(['Word', 'View only']);
-        expect([...toolbar.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['−', '+', 'Reset', 'Info']);
+        expect([...toolbar.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['−', '+', 'Reset', 'Copy formatted', 'Info']);
         expect([...controls.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['↑', '↓']);
         expect(controls.hidden).toBe(false);
         expect(findInput().placeholder).toBe('Find in document…');

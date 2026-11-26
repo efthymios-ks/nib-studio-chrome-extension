@@ -1,9 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDiffTab } from './diffTabs.js';
 import { renderStatusBar } from './statusBar.js';
 import type { AppState } from './store.js';
 import { Store } from './store.js';
 import { openFileFixture } from '../testing/testHelpers.js';
+
+vi.mock('../views/tableViewer.js', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../views/tableViewer.js')>(),
+    sheetLabelOf: (key: string) => (key === 'data/sales.xlsx' ? 'Sheet 2 of 3 · Q2' : null),
+}));
 
 function baseState(patch: Partial<AppState> = {}): AppState {
     return { ...new Store().getState(), ...patch };
@@ -142,5 +147,17 @@ describe('renderStatusBar', () => {
         container.querySelector<HTMLButtonElement>('.status-about')?.click();
 
         expect(document.querySelector('.modal-backdrop[data-role="about"]')).not.toBeNull();
+    });
+
+    it('names the sheet a workbook shows, after its type', () => {
+        const container = document.createElement('footer');
+        const files = [openFileFixture('data/sales.xlsx'), openFileFixture('data/one.xlsx')];
+        renderStatusBar(container, workspaceState({ openFiles: files, activePath: 'data/sales.xlsx' }));
+
+        expect(itemTexts(container)).toEqual(['sales.xlsx', 'Excel workbook', 'Sheet 2 of 3 · Q2', 'clean', 'Workspace: notes']);
+
+        renderStatusBar(container, workspaceState({ openFiles: files, activePath: 'data/one.xlsx' }));
+
+        expect(itemTexts(container)).toEqual(['one.xlsx', 'Excel workbook', 'clean', 'Workspace: notes']);
     });
 });

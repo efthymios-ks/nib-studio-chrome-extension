@@ -7,10 +7,10 @@ import { readDocFile } from '../office/docReader.js';
 import { readWorkbookEncryption } from '../office/encryption/officeEncryption.js';
 import { extractRtfText } from '../office/rtfText.js';
 import { decodePlainText, sniffWordContainer, type WordContainer } from '../office/wordFormat.js';
-import { readWorkbook } from '../office/xlsxLoader.js';
+import { readWorkbook, visibleSheetsOf } from '../office/xlsxLoader.js';
 import { openZipPackage, type ZipPackage } from '../office/zipPackage.js';
 import { decodeTextBytes } from '../text/textEncoding.js';
-import { decodeReferences } from './lookupText.js';
+import { decodeReferences, type TextSection } from './lookupText.js';
 
 // How Lookup reads the text of each kind of file, picked by its extension, with the studio's own readers:
 // another kind is one more entry in EXTRACTORS.
@@ -19,8 +19,9 @@ import { decodeReferences } from './lookupText.js';
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 export type Extraction =
-    // The text, and whether its lines are the file's own, so a match has a line number.
-    | { readonly kind: 'text'; readonly text: string; readonly keepsLines: boolean }
+    // The text, and whether its lines are the file's own, so a match has a line number;
+    // a workbook's lines are its rows, sheet after sheet, and its sections say where each sheet starts.
+    | { readonly kind: 'text'; readonly text: string; readonly keepsLines: boolean; readonly sections?: ReadonlyArray<TextSection> }
     // Protected with a password; its text can be read only from the plain bytes of a tab that unlocked it.
     | { readonly kind: 'locked' }
     // Nothing to search but the name.
@@ -259,23 +260,29 @@ function paragraphText(paragraph: DocParagraph): string {
         .join('');
 }
 
-// Every sheet, row by row, so a match reads in the context of its row.
+// Every visible sheet, a line per row, so a match reads in the context of its row and names its sheet and row.
+// The line breaks inside a cell become spaces, so each row stays one line.
 function readWorkbookText(bytes: Uint8Array, options: ExtractOptions): Extraction {
     if (options.isUnlocked !== true && readWorkbookEncryption(bytes) != null) {
         return { kind: 'locked' };
     }
 
     try {
-        const workbook = readWorkbook(bytes);
+        const lines: string[] = [];
+        const sections: TextSection[] = [];
 
-        return documentText(workbook.sheets
-            .map((sheet) => sheet.rows
-                .map((row) => row
-                    .map((cell) => (cell == null ? '' : String(cell)))
+        for (const sheet of visibleSheetsOf(readWorkbook(bytes))) {
+            sections.push({ name: sheet.name, firstLine: lines.length + 1, firstNumber: sheet.firstRow });
+
+            for (const row of sheet.rows) {
+                lines.push(row
+                    .map((cell) => (cell == null ? '' : String(cell).replace(LINE_BREAKS, ' ')))
                     .filter((cell) => cell !== '')
-                    .join(' '))
-                .join('\n'))
-            .join('\n'));
+                    .join(' '));
+            }
+        }
+
+        return { kind: 'text', text: lines.join('\n'), keepsLines: true, sections };
     }
     catch {
         return { kind: 'name-only' };

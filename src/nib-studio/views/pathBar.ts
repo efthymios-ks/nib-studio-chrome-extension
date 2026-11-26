@@ -1,6 +1,5 @@
+import { copyTextWithToastAsync } from '../app/clipboard.js';
 import { h } from '../app/dom.js';
-import { toast } from '../app/toast.js';
-import { errorMessage } from '../../common/errorMessage.js';
 
 // The path of a node picked in a tree, in two forms.
 export interface PathBarSelection {
@@ -79,7 +78,7 @@ export function createPathBar(options: PathBarOptions): PathBar {
 
     anyPosition.addEventListener('change', refresh);
     copyButton.addEventListener('click', () => {
-        void copyPathAsync(shownPath(), language);
+        void copyTextWithToastAsync(shownPath(), `${language} copied.`);
     });
     useButton?.addEventListener('click', () => onUse?.(shownPath()));
 
@@ -165,14 +164,4 @@ function selectPathNode(tree: HTMLElement, node: HTMLElement, pathBar: PathBar):
         exact: node.dataset['nodePath'] ?? '',
         anyPosition: node.dataset['nodePathAny'] ?? node.dataset['nodePath'] ?? '',
     });
-}
-
-async function copyPathAsync(path: string, language: string): Promise<void> {
-    try {
-        await navigator.clipboard.writeText(path);
-        toast(`${language} copied.`, 'ok');
-    }
-    catch (error) {
-        toast(errorMessage(error, 'Copy failed.'), 'fail');
-    }
 }

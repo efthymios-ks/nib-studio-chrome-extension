@@ -194,6 +194,21 @@ describe('renderDiffHtmlAsync — mermaid pathway', () => {
         expect(stats.diagramsFailed).toBeGreaterThan(0);
         expect(stats.diagramsDrawn).toBe(0);
     });
+
+    it('prints without its buttons, bar and tabs, and prints both sides of a changed diagram, each named', async () => {
+        const original = '```mermaid\ngraph TD\nA --> B\n```\n';
+        const modified = '```mermaid\ngraph TD\nA --> C\n```\n';
+        const diff = diffOf(original, modified);
+
+        const { html } = await renderDiffHtmlAsync(diff, { renderMermaid: svgOf });
+        const print = /@media print\{([^]*?)\n\}/.exec(html)?.[1] ?? '';
+
+        expect(html).toContain('Copy Mermaid');
+        expect(print).toContain('.md-bar,.md-modal,.md-lens,.md-tools,.md-tabbar{display:none!important;}');
+        expect(print).toContain('.md-v-diff .md-panes .md-pane{display:block!important;}');
+        expect(print).toContain('.md-v-diff .md-pane-b::before{content:"Before";}');
+        expect(print).toContain('.md-v-diff .md-pane-a::before{content:"After";}');
+    });
 });
 
 describe('renderDiffHtmlAsync — code gutters', () => {

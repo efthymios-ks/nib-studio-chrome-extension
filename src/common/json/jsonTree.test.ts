@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findJsonError, parseJson } from './jsonTree.js';
+import { findJsonError, isPlainObject, parseJson } from './jsonTree.js';
 
 describe('parseJson', () => {
     it('parses an object', () => {
@@ -57,6 +57,17 @@ describe('parseJson', () => {
 
         expect({ line: result.line, column: result.column }).toEqual({ line, column });
         expect(result.message).toMatch(/^Expected /);
+    });
+});
+
+describe('isPlainObject', () => {
+    it('is true for an object only, never for an array or null', () => {
+        expect(isPlainObject({ id: 1 })).toBe(true);
+        expect(isPlainObject({})).toBe(true);
+        expect(isPlainObject([1])).toBe(false);
+        expect(isPlainObject(null)).toBe(false);
+        expect(isPlainObject(undefined)).toBe(false);
+        expect(isPlainObject('text')).toBe(false);
     });
 });
 

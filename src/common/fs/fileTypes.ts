@@ -322,8 +322,7 @@ export function resolveFileType(name: string): FileType {
 }
 
 // "OpenDocument spreadsheet", "PowerPoint presentation": what kind of workbook,
-// presentation or OpenDocument file
-// a name is; null for the other types.
+// presentation or OpenDocument file a name is; null for the other types.
 export function fileTypeLabel(name: string): string | null {
     return TYPE_LABELS.get(matchFileSuffix(name) ?? '') ?? null;
 }

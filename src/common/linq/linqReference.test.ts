@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { compileQuery, runQueryAsync } from './linqEvaluator.js';
 import { LINQ_AGGREGATES, LINQ_FUNCTIONS, LINQ_METHODS, LINQ_PROPERTIES } from './linqFunctions.js';
 import { LINQ_KEYWORDS } from './linqParser.js';
-import { LINQ_REFERENCE, buildExampleQueries, quoteName } from './linqReference.js';
+import { LINQ_REFERENCE, buildExampleQueries, buildSheetSourceReference, quoteName } from './linqReference.js';
+import { parseQuery } from './linqParser.js';
+import { resolveQuerySheet } from './linqSheets.js';
 import { createArrayTableSource } from './linqSources.js';
 
 // Column names the reference examples use; docs/Tables.md uses the same file.
@@ -79,5 +81,52 @@ describe('buildExampleQueries', () => {
         expect(quoteName('unit price')).toBe('`unit price`');
         expect(quoteName('from')).toBe('`from`');
         expect(quoteName('total')).toBe('total');
+    });
+});
+
+describe('buildExampleQueries for a sheet', () => {
+    it('names the sheet in every example, so each runs on a workbook of several sheets', async () => {
+        const sheets = ['Q1', 'North Region'];
+        const examples = buildExampleQueries(REFERENCE_COLUMNS, SAMPLE_ROWS, "'North Region'");
+
+        expect(examples[0]?.query).toBe("from 'North Region'\ntake 20");
+
+        for (const example of examples) {
+            expect(resolveQuerySheet(parseQuery(example.query), sheets), example.query).toBe(1);
+            await expect(runQueryAsync(example.query, createArrayTableSource(REFERENCE_COLUMNS, SAMPLE_ROWS))).resolves.toBeDefined();
+        }
+
+        expect(examples.some((example) => example.query.startsWith("from row in 'North Region'"))).toBe(true);
+    });
+});
+
+describe('buildSheetSourceReference', () => {
+    it('builds the Source section from the real sheet names', () => {
+        const section = buildSheetSourceReference(['Q1', 'Q2', 'North Region']);
+
+        expect(section.title).toBe('Source');
+        expect(section.intro).toBe("This workbook has 3 sheets: Q1, Q2, 'North Region'. Every query names the one it reads. Keywords ignore case.");
+        expect(section.entries.map((entry) => entry.syntax)).toEqual([
+            'from Q1',
+            'from row in Q1',
+            "from 'North Region', from [North Region]",
+            'from *',
+        ]);
+        expect(section.entries.at(-1)?.description).toBe('Not in a workbook with more than one sheet: name the sheet instead.');
+
+        for (const entry of section.entries) {
+            expect(resolveQuerySheet(parseQuery(entry.example), ['Q1', 'Q2', 'North Region']), entry.example).toBeGreaterThanOrEqual(0);
+        }
+    });
+
+    it('lets from * read a workbook of one sheet', () => {
+        const section = buildSheetSourceReference(['Data']);
+
+        expect(section.intro).toBe('This workbook has one sheet, Data. Keywords ignore case.');
+        expect(section.entries.map((entry) => entry.syntax)).toEqual(['from Data', 'from row in Data', 'from *']);
+    });
+
+    it('keeps the general section without sheets', () => {
+        expect(buildSheetSourceReference([])).toBe(LINQ_REFERENCE[0]);
     });
 });

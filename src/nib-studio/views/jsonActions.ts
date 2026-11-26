@@ -1,9 +1,7 @@
 import { notValidMessage } from '../../common/errorMessage.js';
-import { parseJson } from '../../common/json/jsonTree.js';
+import { formatJson, type JsonLayout } from '../../common/json/jsonFormat.js';
 import type { OpenFile } from '../app/store.js';
 import { toast } from '../app/toast.js';
-
-export type JsonTransform = 'format' | 'minify';
 
 export interface JsonActionCallbacks {
     readonly onChange: (path: string, text: string) => void;
@@ -14,18 +12,15 @@ export interface JsonActionCallbacks {
 export function applyJsonTransform(
     file: OpenFile,
     callbacks: JsonActionCallbacks,
-    mode: JsonTransform,
+    mode: JsonLayout,
 ): void {
-    const parsed = parseJson(file.text);
+    const formatted = formatJson(file.text, mode);
 
-    if (!parsed.ok) {
-        toast(notValidMessage('JSON', parsed), 'fail');
+    if (!formatted.ok) {
+        toast(notValidMessage('JSON', formatted), 'fail');
 
         return;
     }
 
-    const next = mode === 'format'
-        ? JSON.stringify(parsed.value, null, 2)
-        : JSON.stringify(parsed.value);
-    callbacks.onChange(file.path, next);
+    callbacks.onChange(file.path, formatted.text);
 }

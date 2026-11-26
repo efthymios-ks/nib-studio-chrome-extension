@@ -118,7 +118,8 @@ Two text areas side by side, stacked on a narrow window: **Text** on the left, t
 
 - **URL-safe** and **Padding**, shown for Base64 only, apply to encoding:
   **URL-safe**, off by default, uses `-` and `_`; **Padding**, on by default, keeps the trailing `=`.
-- Changing the codec or an option converts again from the side you last typed in.
+- Changing the codec converts again from the side you last typed in;
+  changing an option encodes again when that side is **Text**.
 - The side a conversion wrote has a shaded background until you edit it.
 - The card opens with a sample sentence in **Text** and its Base64 on the right.
 

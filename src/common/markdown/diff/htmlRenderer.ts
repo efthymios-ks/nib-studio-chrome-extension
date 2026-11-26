@@ -272,7 +272,7 @@ const mermaidPaneHtmlAsync = async (source: string, context: RenderContext): Pro
         : `<pre class="md-src"><code>${escapeHtml(source)}</code></pre>`;
 
     const enlarge = svg != null && svg !== '' ? '<button class="md-enlarge" type="button">&#128269; Enlarge</button>' : '';
-    const tools = `<div class="md-tools"><button class="md-copy" type="button" data-src="${encodeBase64(source)}">&#128203; Copy mermaid</button>${enlarge}</div>`;
+    const tools = `<div class="md-tools"><button class="md-copy" type="button" data-src="${encodeBase64(source)}">&#128203; Copy Mermaid</button>${enlarge}</div>`;
 
     return `<div class="md-out">${body}</div>${tools}`;
 };
@@ -995,6 +995,15 @@ html.md-locked{overflow:hidden;}
 .md-modal-cols{grid-template-columns:1fr;grid-template-rows:1fr 1fr;}
 .md-modal-col{border-left:none;border-top:1px solid var(--md-line);}
 .md-modal-col:first-child{border-top:none;}
+}
+@media print{
+body{padding-bottom:0;}
+.md-bar,.md-modal,.md-lens,.md-tools,.md-tabbar{display:none!important;}
+.md-nav{max-height:none;overflow:visible;}
+.md-v-diff .md-panes .md-pane{display:block!important;}
+.md-v-diff .md-pane::before{display:block;margin:8px 0 4px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--md-muted);}
+.md-v-diff .md-pane-b::before{content:"Before";}
+.md-v-diff .md-pane-a::before{content:"After";}
 }`;
 
 const VIEW_BOOTSTRAP_JS = `try { var v = localStorage.getItem('md-diff-view'); if (v === 'before' || v === 'after') document.body.className = 'md-v-' + v; } catch (e) { }`;

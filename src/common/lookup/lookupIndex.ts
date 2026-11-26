@@ -5,7 +5,7 @@ import { looksLikeText, TEXT_SNIFF_BYTES } from '../text/textSniff.js';
 import { extractText, readPlanFor, type Extraction } from './lookupExtractors.js';
 import type { LookupCandidate } from './lookupMatcher.js';
 import { lookUp, type LookupResults } from './lookupResults.js';
-import { flattenText, type FlatText } from './lookupText.js';
+import { flattenText, type FlatText, type TextSection } from './lookupText.js';
 
 // The Lookup index of a workspace: every file's name from the first moment, and its text as it is read in the background,
 // one file at a time, PDFs on a lane of their own. Searches run on what is in memory, never on the disk.
@@ -81,6 +81,7 @@ interface Entry extends LookupCandidate {
     state: EntryState;
     text: string | null;
     lineStarts: Int32Array | null;
+    sections: ReadonlyArray<TextSection> | null;
     // Whether the text came from a tab's unlocked copy.
     isUnlocked: boolean;
     // Goes up whenever the file changes, so a read of an older snapshot is dropped.
@@ -156,10 +157,11 @@ export function createLookupIndex(options: LookupIndexOptions): LookupIndex {
         }, PROGRESS_INTERVAL_MS);
     };
 
-    const setText = (entry: Entry, flat: FlatText | null): void => {
+    const setText = (entry: Entry, flat: FlatText | null, sections: ReadonlyArray<TextSection> | null = null): void => {
         totalChars -= entry.text?.length ?? 0;
         entry.text = flat?.text ?? null;
         entry.lineStarts = flat?.lineStarts ?? null;
+        entry.sections = flat == null ? null : sections;
         totalChars += entry.text?.length ?? 0;
     };
 
@@ -188,7 +190,7 @@ export function createLookupIndex(options: LookupIndexOptions): LookupIndex {
             return;
         }
 
-        setText(entry, flat);
+        setText(entry, flat, extraction.sections ?? null);
         setState(entry, 'text');
         entry.isUnlocked = isUnlocked;
     };
@@ -362,6 +364,7 @@ export function createLookupIndex(options: LookupIndexOptions): LookupIndex {
             state: 'pending',
             text: null,
             lineStarts: null,
+            sections: null,
             isUnlocked: false,
             version: 0,
         };
@@ -533,7 +536,7 @@ export function createLookupIndex(options: LookupIndexOptions): LookupIndex {
             const candidates = function* (): Generator<LookupCandidate> {
                 for (const entry of entries.values()) {
                     const open = openTexts.get(entry.path);
-                    yield open == null ? entry : { ...entry, text: open.flat.text, lineStarts: open.flat.lineStarts };
+                    yield open == null ? entry : { ...entry, text: open.flat.text, lineStarts: open.flat.lineStarts, sections: null };
                 }
             };
 

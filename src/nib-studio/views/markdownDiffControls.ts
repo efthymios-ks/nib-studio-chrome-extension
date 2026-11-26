@@ -1,3 +1,4 @@
+import { copyTextAsync } from '../app/clipboard.js';
 
 const STORAGE_KEY = 'md-diff-view';
 const VIEWS: ReadonlyArray<string> = Object.freeze(['diff', 'before', 'after']);
@@ -348,7 +349,7 @@ export function attachMarkdownDiffControls(frameDocument: Document, options?: Ma
 
         void (async () => {
             try {
-                await navigator.clipboard.writeText(new TextDecoder().decode(bytes));
+                await copyTextAsync(new TextDecoder().decode(bytes));
                 button.textContent = 'Copied';
             }
             catch {

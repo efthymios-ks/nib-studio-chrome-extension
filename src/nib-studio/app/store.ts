@@ -33,13 +33,17 @@ export interface OpenFile {
     readonly large?: boolean;
     // A file of an unknown type whose first bytes aren't text: text stays empty and it opens as a message.
     readonly binary?: boolean;
-    // Set on a file opened from outside the workspace; it saves back through its handle, never into the workspace.
+    // Set on a file opened from outside the workspace, which saves back through its handle, never into the workspace,
+    // and on a paste from the clipboard, which belongs to no folder until it is saved.
     readonly external?: ExternalFile;
 }
 
 export interface ExternalFile {
     // Null when the browser gave no handle for the file, so saving asks where to save.
     readonly handle: FileSystemFileHandle | null;
+    // Set on text or a picture pasted from the clipboard, which is on no disk yet:
+    // saving asks for a name in the workspace, or where to save it when no workspace is open.
+    readonly pasted?: true;
 }
 
 const EXTERNAL_PREFIX = 'external://';

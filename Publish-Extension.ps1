@@ -103,6 +103,8 @@ $script:RequiredEntries = @(
     'nib-studio/styles.css'
     'nib-studio/imageDecodeWorker.js'
     'nib-studio/lookupWorker.js'
+    'nib-studio/sandbox.html'
+    'nib-studio/sandbox.js'
     'nib-studio/pdfjs/LICENSE'
     'nib-studio/pdfjs/pdf.worker.min.mjs'
     'nib-studio/pdfjs/wasm/jbig2_nowasm_fallback.js'

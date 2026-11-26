@@ -4,6 +4,14 @@ import { decodeHtmlEntities } from '../encoding/htmlEntities.js';
 // and at most this many characters of it.
 export const MAX_TEXT_CHARS = 2_000_000;
 
+// A named part of a file's lines, such as one sheet of a workbook: the line it starts on, counting from 1,
+// and the number its first line has within it, such as the sheet's row number.
+export interface TextSection {
+    readonly name: string;
+    readonly firstLine: number;
+    readonly firstNumber: number;
+}
+
 export interface FlatText {
     readonly text: string;
     // For a text file, where the line after each line break of the original starts in the flat text,
@@ -78,6 +86,24 @@ export function lineAt(lineStarts: Int32Array, position: number): number {
     }
 
     return low + 1;
+}
+
+// The section a line lies in, and the line's number within it; null when the line comes before every section.
+export function sectionAt(
+    sections: ReadonlyArray<TextSection>,
+    line: number,
+): { readonly name: string; readonly number: number } | null {
+    let found: TextSection | null = null;
+
+    for (const section of sections) {
+        if (section.firstLine > line) {
+            break;
+        }
+
+        found = section;
+    }
+
+    return found == null ? null : { name: found.name, number: found.firstNumber + line - found.firstLine };
 }
 
 // Decodes the character references of HTML or XML text; one the studio doesn't know stays as it is written.
