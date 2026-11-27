@@ -37,7 +37,8 @@ It also reads:
 All of it is processed inside the Nib Studio tab, in your browser.  
 Nib Studio writes to the clipboard only when you copy:
 with `Ctrl+C`, a copy button such as **Copy raw**, **Copy formatted**, **Copy content** or **Copy image**,
-or a copy item in a context menu, such as **Copy path to clipboard**.
+a copy item in a context menu, such as **Copy path to clipboard**,
+or a copy button of an HTML page in its **Preview**, on your click; see [Markdown and HTML](#markdown-and-html).
 
 ## What Nib Studio writes to your files
 
@@ -53,8 +54,10 @@ Nib Studio changes files on disk only when you ask it to, and only in these case
   after you allow editing in the browser's own prompt.  
   When the browser gave no link to the original, **Save as…** writes to the file you pick in the browser's save dialog.  
   Nothing from such a tab is ever written into the workspace.
-- **Save** in the tab that **Convert XML to JSON**, **Convert YAML to JSON** or **Convert JSON to YAML** opens
-  writes `name.xml.converted.json`, `name.yaml.converted.json` or `name.json.converted.yaml` next to its source file.
+- **Save** in the tab that **Convert XML to JSON**, **Convert YAML to JSON**, **Convert JSON to YAML**,
+  **Convert HTML to Markdown** or **Convert Markdown to HTML** opens writes `name.xml.converted.json`,
+  `name.yaml.converted.json`, `name.json.converted.yaml`, `name.html.converted.md` or `name.md.converted.html`
+  next to its source file.
 - **Save** in a tab that **Paste from clipboard** opened writes a new file under the name you give it,
   in the folder selected in the Explorer or at the workspace root, never over an existing file;
   with no workspace open, it writes where you pick in the browser's save dialog.
@@ -106,7 +109,8 @@ A Markdown document can point an image at a web address, such as `![chart](https
 The Interactive view, the Preview, Split and PDF export never fetch it: the image shows as a placeholder with its address.  
 An image in HTML pasted into the Interactive view becomes such a Markdown image link, also never fetched.  
 On top of that, the extension's content security policy only lets its pages load images from the extension itself,
-`data:` and `blob:` URLs, and only lets them connect to the extension itself, so no page of Nib Studio can reach the network.  
+`data:` and `blob:` URLs, and lets them connect to nothing but the extension itself and `data:` and `blob:` URLs,
+so no page of Nib Studio can reach the network.  
 **Export HTML** keeps web image addresses as written, because the exported file is opened outside the extension.  
 Word documents show only the pictures stored in the file, from `data:` and `blob:` URLs;
 pictures linked from the web or the disk never load, and links in a Word document are never followed outside it.
@@ -130,7 +134,8 @@ An HTML file's **Preview** runs the page's own scripts, so its buttons and other
 inside the extension's sandbox page, `nib-studio/sandbox.html`, which keeps the page apart from everything else:
 
 - **No network.** The sandbox page has a content security policy of its own, set in the extension's manifest,
-  that allows no connection at all: `fetch`, `XMLHttpRequest`, WebSockets, beacons and the like are refused,
+  that allows no connection to the network: `fetch` and `XMLHttpRequest` reach only `data:` and `blob:` URLs,
+  which the page holds itself, and web addresses, WebSockets, beacons and the like are refused,
   and scripts, style sheets, images, fonts and media load only from the page itself, as inline content,
   `data:` or `blob:` URLs, never from the web.
   A form's submission goes nowhere: its `submit` handlers run, and the policy refuses anything sent.
@@ -148,9 +153,14 @@ inside the extension's sandbox page, `nib-studio/sandbox.html`, which keeps the 
   so the page's scripts can't read or change the studio's page, its storage, the workspace folder or other files,
   and have no access to the extension's `chrome` API or its storage.
   The page talks to the studio only through a few messages the studio checks:
-  that it has loaded, a link to follow, `Ctrl+S`, and its scroll.
+  that it has loaded, a link to follow, something to copy, `Ctrl+S`, and its scroll.
   A link opens only after a click or a key press in the page, and only as a link in a preview opens:
   a workspace file in a tab, or a web address in a new browser tab.
+- **Copies on your click only.** The page's script can't reach the clipboard itself,
+  so its copies, such as a **Copy** button's, go through the studio:
+  text, formatted text and PNG pictures, during a click or a key press in the page,
+  with a `Copied from the page.` toast.
+  A copy the page's script makes by itself copies nothing, and the page can never read the clipboard.
 - **Remote scripts are blocked.** A script, style sheet, image or font from the web is left out of the page,
   and the policy refuses one the page's own script tries to add.
 - **Workspace scripts are inlined.** A script the page links with `<script src="app.js">` is read from the workspace,

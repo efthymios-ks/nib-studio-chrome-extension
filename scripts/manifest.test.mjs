@@ -51,11 +51,11 @@ describe('manifest.json', () => {
         expect(constantOf('src/nib-studio/views/htmlPreview.ts', 'SANDBOX_FLAGS')?.split(' ')).toEqual(SANDBOX_TOKENS);
     });
 
-    it('gives the sandbox page no network: nothing connects, and every source is the page itself or inline', () => {
+    it('gives the sandbox page no network: it connects only to data: and blob: URLs, and every source is the page itself or inline', () => {
         const directives = directivesOf(MANIFEST.content_security_policy.sandbox);
 
         expect(directives.get('default-src')).toEqual(["'none'"]);
-        expect(directives.get('connect-src')).toEqual(["'none'"]);
+        expect(directives.get('connect-src')).toEqual(['data:', 'blob:']);
         expect(directives.get('form-action')).toEqual(["'none'"]);
         expect(directives.get('base-uri')).toEqual(["'none'"]);
         expect(directives.get('script-src')).toEqual(["'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', 'data:']);
@@ -67,6 +67,17 @@ describe('manifest.json', () => {
         for (const [name, sources] of directives) {
             expect(sources.filter(isRemoteSource), name).toEqual([]);
         }
+    });
+
+    it('names no web scheme, WebSocket or host as a source, in any directive of the sandbox page', () => {
+        const sources = [...directivesOf(MANIFEST.content_security_policy.sandbox)]
+            .filter(([name]) => name !== 'sandbox' && name !== 'trusted-types' && name !== 'require-trusted-types-for')
+            .flatMap(([, list]) => list);
+        const remote = ['http:', 'https:', 'ws:', 'wss:', 'ftp:', '*', 'https://example.com', 'wss://example.com', 'example.com'];
+
+        expect(sources.filter((source) => remote.includes(source) || isRemoteSource(source))).toEqual([]);
+        expect(remote.every(isRemoteSource)).toBe(true);
+        expect(['data:', 'blob:', "'self'", "'none'", "'unsafe-inline'"].some(isRemoteSource)).toBe(false);
     });
 
     it('lets the page make no frame or worker, since WebRTC, which no policy governs, would come back in one', () => {

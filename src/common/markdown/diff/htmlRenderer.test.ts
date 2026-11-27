@@ -204,7 +204,7 @@ describe('renderDiffHtmlAsync — mermaid pathway', () => {
         const print = /@media print\{([^]*?)\n\}/.exec(html)?.[1] ?? '';
 
         expect(html).toContain('Copy Mermaid');
-        expect(print).toContain('.md-bar,.md-modal,.md-lens,.md-tools,.md-tabbar{display:none!important;}');
+        expect(print).toContain('.md-bar,.md-modal,.md-lens,.md-tools,.md-tabbar,.md-zoom{display:none!important;}');
         expect(print).toContain('.md-v-diff .md-panes .md-pane{display:block!important;}');
         expect(print).toContain('.md-v-diff .md-pane-b::before{content:"Before";}');
         expect(print).toContain('.md-v-diff .md-pane-a::before{content:"After";}');

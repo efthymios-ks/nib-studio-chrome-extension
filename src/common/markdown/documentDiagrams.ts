@@ -14,10 +14,10 @@ export interface DiagramImage {
 // Draws a Mermaid diagram as a picture; it throws, or gives null, when the diagram can't be drawn.
 export type DrawDiagramAsync = (source: string) => Promise<DiagramImage | null>;
 
-// What takes a diagram's place in a document: its picture when drawn, or, when it can't be drawn,
-// what stands in for it, made from its source and the reason.
+// What takes a diagram's place in a document: its picture, given with its source, when drawn,
+// or, when it can't be drawn, what stands in for it, made from its source and the reason.
 export interface DiagramElements {
-    readonly drawn: (picture: HTMLImageElement) => Element;
+    readonly drawn: (picture: HTMLImageElement, source: string) => Element;
     readonly failed: (source: string, message: string) => Element;
 }
 
@@ -66,7 +66,7 @@ async function diagramElementAsync(source: string, drawing: DocumentDiagrams): P
         return drawing.elements.failed(source, drawn);
     }
 
-    return drawing.elements.drawn(diagramPicture(drawn));
+    return drawing.elements.drawn(diagramPicture(drawn), source);
 }
 
 // The picture of a diagram, or why it can't be drawn, as the preview says it.

@@ -8,6 +8,17 @@ export interface ScrollPosition {
     readonly top: number;
 }
 
+// The types a page may put on the clipboard: text, and for a rich copy its HTML and a PNG picture.
+export const PAGE_CLIPBOARD_TYPES = Object.freeze(['text/plain', 'text/html', 'image/png'] as const);
+
+export type PageClipboardType = typeof PAGE_CLIPBOARD_TYPES[number];
+
+// What a page asks to put on the clipboard, by type: text for the text types, a blob for the picture.
+export type PageClipboardContent = Readonly<Partial<Record<PageClipboardType, string | Blob>>>;
+
+// Why a copy with no click or key press in the page behind it is refused.
+export const PAGE_COPY_NEEDS_GESTURE = 'The page can write to the clipboard only on a click or key press.';
+
 // From the studio to the sandbox page.
 export type StudioMessage =
     // The page to draw, the scroll to restore once it has loaded, and a place to reveal then.
@@ -25,6 +36,13 @@ export type StudioMessage =
         readonly type: 'reveal';
         readonly fragment: string;
         readonly isSmooth: boolean;
+    }
+    // How the page's copy with this id went: null once it is on the clipboard, or why it isn't.
+    | {
+        readonly channel: typeof SANDBOX_CHANNEL;
+        readonly type: 'copied';
+        readonly id: number;
+        readonly error: string | null;
     };
 
 // From the sandbox page to the studio.
@@ -37,7 +55,15 @@ export type SandboxMessage =
     | { readonly channel: typeof SANDBOX_CHANNEL; readonly type: 'link'; readonly href: string }
     // Ctrl+S in the page.
     | { readonly channel: typeof SANDBOX_CHANNEL; readonly type: 'save' }
-    | { readonly channel: typeof SANDBOX_CHANNEL; readonly type: 'scroll'; readonly left: number; readonly top: number };
+    | { readonly channel: typeof SANDBOX_CHANNEL; readonly type: 'scroll'; readonly left: number; readonly top: number }
+    // Content the page's script asks to put on the clipboard, and whether a click or key press in the page was behind it.
+    | {
+        readonly channel: typeof SANDBOX_CHANNEL;
+        readonly type: 'copy';
+        readonly id: number;
+        readonly isActive: boolean;
+        readonly content: PageClipboardContent;
+    };
 
 type MessageRecord = Readonly<Record<string, unknown>>;
 
@@ -72,6 +98,15 @@ const STUDIO_MESSAGE_READERS: Readonly<Record<StudioMessage['type'], Reader<Stud
 
         return { channel: SANDBOX_CHANNEL, type: 'reveal', fragment: record.fragment, isSmooth: record.isSmooth };
     },
+    copied: (record) => {
+        const { id, error } = record;
+
+        if (!isCopyId(id) || (error !== null && typeof error !== 'string')) {
+            return null;
+        }
+
+        return { channel: SANDBOX_CHANNEL, type: 'copied', id, error };
+    },
 };
 
 const SANDBOX_MESSAGE_READERS: Readonly<Record<SandboxMessage['type'], Reader<SandboxMessage>>> = {
@@ -83,6 +118,16 @@ const SANDBOX_MESSAGE_READERS: Readonly<Record<SandboxMessage['type'], Reader<Sa
         const scroll = readScroll(record);
 
         return scroll == null ? null : { channel: SANDBOX_CHANNEL, type: 'scroll', left: scroll.left, top: scroll.top };
+    },
+    copy: (record) => {
+        const { id, isActive } = record;
+        const content = readClipboardContent(record.content);
+
+        if (!isCopyId(id) || typeof isActive !== 'boolean' || content == null) {
+            return null;
+        }
+
+        return { channel: SANDBOX_CHANNEL, type: 'copy', id, isActive, content };
     },
 };
 
@@ -130,4 +175,38 @@ function readScroll(value: unknown): ScrollPosition | null {
 
 function isFragmentOrNull(value: unknown): value is string | null {
     return value === null || typeof value === 'string';
+}
+
+function isCopyId(value: unknown): value is number {
+    return typeof value === 'number' && Number.isSafeInteger(value);
+}
+
+// The content of a copy, with each known type's data of its kind; null when it holds none, or a type of the wrong kind.
+function readClipboardContent(value: unknown): PageClipboardContent | null {
+    if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+
+    const record = value as MessageRecord;
+    const content: Partial<Record<PageClipboardType, string | Blob>> = {};
+
+    for (const type of PAGE_CLIPBOARD_TYPES) {
+        const data = record[type];
+
+        if (data === undefined) {
+            continue;
+        }
+
+        if (!isClipboardData(type, data)) {
+            return null;
+        }
+
+        content[type] = data;
+    }
+
+    return Object.keys(content).length === 0 ? null : content;
+}
+
+function isClipboardData(type: PageClipboardType, data: unknown): data is string | Blob {
+    return type === 'image/png' ? data instanceof Blob : typeof data === 'string';
 }

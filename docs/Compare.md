@@ -410,7 +410,10 @@ A rendered, document-style diff in a frame, built from the original and modified
   shows the position, such as `3 / 12`, and `⇄` opens a side-by-side modal.
   Clicking any change opens the modal too; `←`, `→` and `Esc` work inside it,
   and on a diagram its magnifier button turns on a lens that follows the pointer.
-- **Copy Mermaid** and **Copy table** copy the source; **Enlarge** opens a diagram in a new tab.
+- **Copy Mermaid** and **Copy table** copy the source.
+- **Enlarge** shows a diagram in a dialog over the diff, as the exported page does:
+  the diagram fits the window, a click on it zooms in around the pointer and the next fits it again,
+  and `Esc`, `✕` or a click beside it closes the dialog, leaving the side-by-side modal open when it was.
 
 The chosen view and the scroll position belong to the diff tab, and the page is built once per pair of texts;
 a **Building diff…** toast shows while it is built.  
@@ -491,6 +494,10 @@ It follows the system's light or dark setting.
 A Markdown export is the Markdown diff page itself, the same page the tab shows,
 light whatever the system's setting, with `n` and `p` for keys and `↑` and `↓` as buttons;
 only the ids Mermaid gives the parts of each diagram differ from one drawing to the next.  
+Its **Enlarge** shows a diagram in a dialog over the page, as the diff tab's does:
+the diagram fits the window, a click on it zooms in and out, and `Esc`, `✕` or a click beside it closes the dialog.
+So every button works wherever the page is opened, Nib Studio's HTML [Preview](Editor.md#preview) included,
+where **Copy Mermaid** and **Copy table** copy through the studio.  
 Printed, it leaves out its on-page controls: the copy buttons, **Enlarge**, the **Diff**, **Before** and **After** bar,
 and the **Before** and **After** tab labels.
 A changed diagram or table prints both sides, each labelled **Before** or **After**,

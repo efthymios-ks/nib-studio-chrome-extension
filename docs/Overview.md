@@ -21,7 +21,7 @@ flowchart LR
     folder -- ".nib-studio-configuration.json" --> studio
     dropped[("Files dropped from the desktop")] -- "read, saved back on request" --> studio
     studio -- "an HTML file's page, by postMessage" --> sandbox["Sandbox page: nib-studio/sandbox.html"]
-    sandbox -- "links, Ctrl+S, scroll" --> studio
+    sandbox -- "links, copies, Ctrl+S, scroll" --> studio
 ```
 
 - The toolbar button runs the action.
@@ -273,6 +273,7 @@ nib-studio-chrome-extension/
 │     ├─ main.ts  index.html  styles.scss
 │     ├─ sandbox.html  sandbox.ts  sandboxPage.ts  # the HTML preview's sandbox page and its script
 │     ├─ sandboxGuard.ts      # keeps WebRTC, and frames that would bring it back, from the page
+│     ├─ sandboxClipboard.ts  # the page's clipboard writes, through the studio
 │     ├─ imageDecodeWorker.ts # the TIFF decode worker
 │     ├─ lookupWorker.ts      # the Lookup worker, which reads and searches the workspace
 │     ├─ app/                 # App, store, shell, commands, dialogs, status bar, toasts, About, desktop drops, shortcut keys,
@@ -312,7 +313,8 @@ sequenceDiagram
     Sandbox->>Studio: ready
     Studio->>Sandbox: render: the page, its scroll, a place to reveal
     Sandbox->>Sandbox: document.open, write, close: the page's scripts run
-    Sandbox->>Studio: rendered, then link, save and scroll as the page is used
+    Sandbox->>Studio: rendered, then link, copy, save and scroll as the page is used
+    Studio->>Sandbox: copied: how a copy went
     Studio->>Studio: the new frame takes the shown one's place
 ```
 
@@ -324,12 +326,13 @@ sequenceDiagram
   `allow-forms` lets a form's `submit` handlers run; `form-action 'none'` keeps anything from being sent,
   and `sandboxPage.ts` cancels the submission once the handlers have run, so the frame keeps its page.
 - **Policy:** `content_security_policy.sandbox` in the manifest:
-  `default-src 'none'`, `connect-src 'none'`, `form-action 'none'` and `base-uri 'none'`;
+  `default-src 'none'`, `connect-src data: blob:`, `form-action 'none'` and `base-uri 'none'`;
   scripts from the sandbox page's own `sandbox.js` (`'self'`), inline, `eval`, `blob:` and `data:`;
   styles inline, `data:` and `blob:`; images, fonts and media `data:` and `blob:`;
   `frame-src 'none'`, `child-src 'none'` and `worker-src 'none'`, so the page has no frame or worker of its own;
   and `require-trusted-types-for 'script'` with `trusted-types default nib-studio-page`.
-  No source names the web.
+  No source names the web: a `fetch` reaches only the page's own `data:` and `blob:` URLs,
+  and an `http(s)` or WebSocket address is refused.
   The studio's own `frame-src 'self'` stops the frame from going to a web address, should the page try.
 - **WebRTC:** no content security policy in Chrome governs it, so `sandboxGuard.ts` takes every WebRTC interface
   off the page's window before its scripts run, and keeps the page from a frame that would bring them back.
@@ -348,9 +351,19 @@ sequenceDiagram
 - **Messages:** `common/html/sandboxMessages.ts` reads each message back into a known shape and drops anything else.
   The studio takes a message only from the window of one of its preview frames, from the opaque origin `null`;
   the sandbox page takes one only from the studio's window and origin.
-  The sandbox page posts `ready`, `rendered`, `link`, `save` and `scroll`; the studio posts `render` and `reveal`.
+  The sandbox page posts `ready`, `rendered`, `link`, `copy`, `save` and `scroll`;
+  the studio posts `render`, `reveal` and `copied`.
   A `link` is followed through `views/workspaceLinks.ts` as a click in a preview is, and only during a user activation,
   which a click or key press in the frame gives the studio's window too.
+- **Clipboard:** the frame's permissions policy gives the page no clipboard,
+  and the frame never asks for `allow="clipboard-write"`, which would let a script write without a click.
+  Instead `sandboxClipboard.ts` replaces `navigator.clipboard.writeText` and `write` on the page's window
+  before its scripts run, with versions that post a `copy`: text, HTML or a PNG picture,
+  and whether the frame had a user activation as the page called.
+  The studio writes it through `app/clipboard.ts` only from the shown frame, only when the frame had one
+  and the studio's window has one too, as for a `link`, and confirms with `Copied from the page.`;
+  its `copied` answer resolves or rejects the page's promise.
+  Reads stay refused, and `document.execCommand('copy')` is left as Chrome has it.
 - **Drawing again:** each drawing gets a new frame, loaded beneath the shown one and swapped in on `rendered`,
   or after 1.5 s, so the page's scripts start afresh and nothing flashes.
   Each load of a frame is answered by `ready` or `rendered`;

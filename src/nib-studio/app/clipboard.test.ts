@@ -6,6 +6,7 @@ import {
     copyTextAsync,
     copyTextLaterAsync,
     copyTextWithToastAsync,
+    copyTypesAsync,
     writeClipboardAsync,
 } from './clipboard.js';
 
@@ -76,6 +77,20 @@ describe('clipboard', () => {
         });
 
         await expect(writeClipboardAsync(Promise.reject(new Error('Rows could not be read.')), { 'text/plain': String })).rejects.toThrow('Rows could not be read.');
+    });
+
+    it('puts content of several types on the clipboard as one item, each a blob of its type, and text alone as plain text', async () => {
+        const picture = new Blob(['png'], { type: 'image/png' });
+
+        await copyTypesAsync({ 'text/plain': 'Hi' });
+        await copyTypesAsync({ 'text/plain': 'Hi', 'text/html': '<b>Hi</b>', 'image/png': picture });
+        const html = await items[0]?.data['text/html'];
+
+        expect(writeText).toHaveBeenCalledWith('Hi');
+        expect(write).toHaveBeenCalledTimes(1);
+        expect(Object.keys(items[0]?.data ?? {})).toEqual(['text/plain', 'text/html', 'image/png']);
+        expect([html?.type, await html?.text()]).toEqual(['text/html', '<b>Hi</b>']);
+        expect(await items[0]?.data['image/png']).toBe(picture);
     });
 
     it('says so when the browser has no clipboard to write items to', async () => {

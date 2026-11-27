@@ -91,8 +91,8 @@ const MODIFIED = [
 
 // The Markdown diff page for ORIGINAL and MODIFIED, pinned byte for byte so any change to it is a deliberate one.
 const GOLDEN_PAGE = Object.freeze({
-    length: 27552,
-    sha256: 'b6d38b7eafa9236b3a44ceb9db7acdf24e9c9dbdd57b7232be37bd5be61cc568',
+    length: 31648,
+    sha256: '871785b3709c9de48dcad9edc79794a895e7ede5e3190c7347cd48ca639d337c',
 });
 
 // The page the Markdown renderer draws straight from both texts, with no diff document between them.

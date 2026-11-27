@@ -13,6 +13,10 @@ import type {
     TableDiff,
 } from './types.js';
 
+// How far a click on an enlarged diagram zooms in, and the side-by-side loupe magnifies,
+// on the exported page and in the studio's diff tab alike.
+export const DIAGRAM_ZOOM = 2.5;
+
 const escapeHtml = (text: string | null | undefined): string => {
     if (text == null) {
         return '';
@@ -959,8 +963,8 @@ body{padding-bottom:72px;}
 .md-flash{animation:md-flash 1.6s ease-out;}
 .md-v-before .md-wrap del{text-decoration:none;}
 .md-bar{position:fixed;right:16px;bottom:16px;z-index:20;display:flex;align-items:center;gap:6px;padding:6px;background:#fff;border:1px solid var(--md-line);border-radius:8px;box-shadow:0 4px 14px rgba(9,30,66,.2);}
-.md-bar button,.md-modal-h button{font:inherit;font-size:12px;font-weight:600;line-height:1.4;color:#42526e;background:#f4f5f7;border:1px solid #dfe1e6;border-radius:4px;padding:4px 10px;cursor:pointer;}
-.md-bar button:hover,.md-modal-h button:hover{background:#e9ebee;}
+.md-bar button,.md-modal-h button,.md-zoom-h button{font:inherit;font-size:12px;font-weight:600;line-height:1.4;color:#42526e;background:#f4f5f7;border:1px solid #dfe1e6;border-radius:4px;padding:4px 10px;cursor:pointer;}
+.md-bar button:hover,.md-modal-h button:hover,.md-zoom-h button:hover{background:#e9ebee;}
 .md-modal-h button:disabled{opacity:.4;cursor:default;}
 .md-seg{display:flex;}
 .md-seg button{border-radius:0;margin-left:-1px;}
@@ -989,6 +993,14 @@ html.md-locked{overflow:hidden;}
 .md-loupe-on .md-side .md-diagram img{cursor:crosshair;}
 .md-lens{position:fixed;z-index:40;width:280px;height:170px;pointer-events:none;background:#fff no-repeat;border:2px solid #0052cc;border-radius:6px;box-shadow:0 6px 20px rgba(9,30,66,.35);}
 .md-lens[hidden]{display:none;}
+.md-zoom{width:96vw;max-width:none;height:96vh;max-height:none;margin:auto;padding:0;color:var(--md-fg);background:#fff;border:none;border-radius:8px;box-shadow:0 8px 32px rgba(9,30,66,.3);overflow:hidden;}
+.md-zoom[open]{display:flex;flex-direction:column;}
+.md-zoom::backdrop{background:rgba(9,30,66,.54);}
+.md-zoom-h{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--md-line);}
+.md-zoom-hint{flex:1;font-size:12px;color:var(--md-muted);}
+.md-zoom-body{flex:1;min-height:0;display:flex;padding:16px;overflow:auto;}
+.md-zoom-body img{flex:none;margin:auto;max-width:none;height:auto;cursor:zoom-in;}
+.md-zoom-in .md-zoom-body img{cursor:zoom-out;}
 @media (max-width:800px){
 .md-modal{padding:0;}
 .md-modal-box{border-radius:0;}
@@ -998,7 +1010,7 @@ html.md-locked{overflow:hidden;}
 }
 @media print{
 body{padding-bottom:0;}
-.md-bar,.md-modal,.md-lens,.md-tools,.md-tabbar{display:none!important;}
+.md-bar,.md-modal,.md-lens,.md-tools,.md-tabbar,.md-zoom{display:none!important;}
 .md-nav{max-height:none;overflow:visible;}
 .md-v-diff .md-panes .md-pane{display:block!important;}
 .md-v-diff .md-pane::before{display:block;margin:8px 0 4px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--md-muted);}
@@ -1019,7 +1031,11 @@ const VIEW_JS = `(function () {
   var sideAfter = modal.querySelector('.md-side-after');
   var lens = modal.querySelector('.md-lens');
   var loupe = modal.querySelector('.md-loupe');
-  var ZOOM = 2.5;
+  var zoom = document.querySelector('.md-zoom');
+  var zoomBody = zoom.querySelector('.md-zoom-body');
+  var zoomImage = null;
+  var zoomSize = null;
+  var ZOOM = ${DIAGRAM_ZOOM};
   var listed = {};
   Array.prototype.forEach.call(document.querySelectorAll('.md-nav a'), function (link) { listed[link.getAttribute('href').slice(1)] = true; });
   var changes = Array.prototype.filter.call(document.querySelectorAll('.md-body [id^="chg"]'), function (element) { return listed[element.id]; });
@@ -1185,26 +1201,102 @@ const VIEW_JS = `(function () {
     else moveTo(element, false);
   }
 
+  function copyBySelection(text) {
+    var area = document.createElement('textarea');
+    var active = document.activeElement;
+    var copied = false;
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.top = '0';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try { copied = document.execCommand('copy'); } catch (e) { }
+    document.body.removeChild(area);
+    if (active && active.focus) active.focus({ preventScroll: true });
+    return copied;
+  }
+
+  function copySource(button) {
+    var bin = atob(button.getAttribute('data-src')), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var text = new TextDecoder().decode(arr);
+    var label = button.getAttribute('data-label') || button.textContent;
+    button.setAttribute('data-label', label);
+    function done(copied) {
+      button.textContent = copied ? 'Copied' : 'Copy failed';
+      clearTimeout(button.copiedTimer);
+      button.copiedTimer = setTimeout(function () { button.textContent = label; }, 1200);
+    }
+    var writing;
+    try { writing = navigator.clipboard.writeText(text); } catch (e) { writing = Promise.reject(e); }
+    writing.then(function () { done(true); }, function () { done(copyBySelection(text)); });
+  }
+
+  function fitZoom() {
+    var style = getComputedStyle(zoomBody);
+    var width = zoomBody.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    var height = zoomBody.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    var scale = Math.min(width / zoomSize.width, height / zoomSize.height);
+    zoomImage.style.width = Math.max(1, Math.floor(zoomSize.width * scale)) + 'px';
+    zoomBody.scrollLeft = 0;
+    zoomBody.scrollTop = 0;
+  }
+
+  function openZoom(image) {
+    var rect = image.getBoundingClientRect();
+    zoomSize = { width: rect.width || image.naturalWidth || 4, height: rect.height || image.naturalHeight || 3 };
+    zoomImage = document.createElement('img');
+    zoomImage.alt = 'Enlarged diagram';
+    zoomImage.src = image.src;
+    zoomBody.appendChild(zoomImage);
+    zoom.classList.remove('md-zoom-in');
+    zoom.showModal();
+    root.classList.add('md-locked');
+    fitZoom();
+  }
+
+  function toggleZoom(e) {
+    var rect = zoomImage.getBoundingClientRect();
+    var x = rect.width ? (e.clientX - rect.left) / rect.width : .5, y = rect.height ? (e.clientY - rect.top) / rect.height : .5;
+    if (!zoom.classList.toggle('md-zoom-in')) { fitZoom(); return; }
+    zoomImage.style.width = (rect.width * ZOOM) + 'px';
+    var zoomed = zoomImage.getBoundingClientRect();
+    zoomBody.scrollLeft += zoomed.left + x * zoomed.width - e.clientX;
+    zoomBody.scrollTop += zoomed.top + y * zoomed.height - e.clientY;
+  }
+
+  zoom.addEventListener('close', function () {
+    if (zoomImage) zoomBody.removeChild(zoomImage);
+    zoomImage = null;
+    if (modal.hidden) root.classList.remove('md-locked');
+  });
+
+  window.addEventListener('resize', function () {
+    if (zoom.open && !zoom.classList.contains('md-zoom-in')) fitZoom();
+  });
+
   document.addEventListener('click', function (e) {
     var target = e.target;
 
+    if (zoom.open) {
+      if (target === zoomImage) toggleZoom(e);
+      else if (target === zoom || target === zoomBody || target.closest('.md-zoom-x')) zoom.close();
+      return;
+    }
+
     var copy = target.closest('.md-copy');
     if (copy) {
-      var bin = atob(copy.getAttribute('data-src')), arr = new Uint8Array(bin.length);
-      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      navigator.clipboard.writeText(new TextDecoder().decode(arr));
-      var text = copy.textContent;
-      copy.textContent = 'Copied';
-      setTimeout(function () { copy.textContent = text; }, 1200);
+      copySource(copy);
       return;
     }
 
     var enlarge = target.closest('.md-enlarge');
     if (enlarge) {
-      var img = enlarge.closest('.md-pane, .md-diff, .md-mermaid').querySelector('img');
-      if (!img) return;
-      fetch(img.src).then(function (r) { return r.blob(); })
-        .then(function (blob) { window.open(URL.createObjectURL(blob), '_blank'); });
+      var holder = enlarge.closest('.md-pane, .md-diff, .md-mermaid');
+      var img = holder && holder.querySelector('img');
+      if (img) openZoom(img);
       return;
     }
 
@@ -1234,7 +1326,7 @@ const VIEW_JS = `(function () {
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (zoom.open || e.ctrlKey || e.metaKey || e.altKey) return;
     if (!modal.hidden) {
       if (e.key === 'Escape') closeModal();
       else if (e.key === 'ArrowLeft') openAt(shown - 1);
@@ -1319,6 +1411,14 @@ const MODAL_HTML = '<div class="md-modal" hidden><div class="md-modal-box" role=
     '<section class="md-modal-col"><div class="md-modal-ch">Before</div><div class="md-side md-side-before md-body"></div></section>' +
     '<section class="md-modal-col"><div class="md-modal-ch">After</div><div class="md-side md-side-after md-body"></div></section>' +
     '</div><div class="md-lens" hidden></div></div></div>';
+
+// Enlarge shows a diagram in this dialog, over the page, so it works wherever the page is opened:
+// a sandboxed frame such as Nib Studio's HTML preview opens no window, and the diagram's own data: picture needs no fetch.
+// The script puts the picture in only while the dialog is open, so the page holds no other image.
+const ZOOM_HTML = '<dialog class="md-zoom" aria-label="Enlarged diagram"><div class="md-zoom-h">' +
+    '<span class="md-zoom-hint">Click the diagram to zoom in or out</span>' +
+    '<button type="button" class="md-zoom-x" title="Close (Esc)" aria-label="Close">&#10005;</button></div>' +
+    '<div class="md-zoom-body"></div></dialog>';
 
 // Additional stats the renderer collects for the caller to log.
 export interface RenderStats {
@@ -1486,7 +1586,7 @@ export const renderDiffHtmlAsync = async (
         `<body class="md-v-diff"><script>${VIEW_BOOTSTRAP_JS}</script><div class="md-wrap">` +
         `<div class="md-meta">${meta}</div><h1 class="md-title">${escapeHtml(title)}</h1>` +
         `${navHtml}<div class="md-body">${bodyParts.join('')}</div></div>` +
-        `${barHtml}${MODAL_HTML}` +
+        `${barHtml}${MODAL_HTML}${ZOOM_HTML}` +
         `<script>${VIEW_JS}</script></body></html>`;
 
     let insertions = 0;

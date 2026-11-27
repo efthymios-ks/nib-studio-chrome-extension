@@ -171,6 +171,10 @@ The other docs go deeper on each area; this one is the complete list.
 - **Convert XML to JSON:** converts an XML file in the workspace and opens the result in a new tab named `name.xml.converted.json`.
 - **Convert YAML to JSON:** converts a YAML file in the workspace and opens the result in a new tab named `name.yaml.converted.json`.
 - **Convert JSON to YAML:** converts a JSON file in the workspace and opens the result in a new tab named `name.json.converted.yaml`.
+- **Convert HTML to Markdown:** converts an HTML file in the workspace and opens the Markdown in a new tab named `name.html.converted.md`;
+  see [HTML](#html).
+- **Convert Markdown to HTML:** converts a Markdown file in the workspace and opens the HTML page in a new tab
+  named `name.md.converted.html`; see [Markdown](#markdown).
 - **Compare XML with…:** asks for the other file on disk and opens the XML diff in a new diff tab.
 - **Save pages…:** saves chosen pages of a PDF as a new PDF beside it; see [PDF preview](#pdf-preview).
 - **Refresh:** rereads the tree from disk.
@@ -254,7 +258,8 @@ The other docs go deeper on each area; this one is the complete list.
   It is left out on the tab of a file from outside the workspace.
 - **Tab context menu:** right-click a tab for **Reveal in Explorer**, **Compare with…**, **New compare**,
   **Copy name to clipboard**, **Copy path to clipboard**, **Copy content to clipboard**, **Format JSON**, **Format YAML**,
-  **Convert XML to JSON**, **Convert YAML to JSON**, **Convert JSON to YAML**, **Compare XML with…**, **Save pages…**,
+  **Convert XML to JSON**, **Convert YAML to JSON**, **Convert JSON to YAML**,
+  **Convert HTML to Markdown**, **Convert Markdown to HTML**, **Compare XML with…**, **Save pages…**,
   **Close**, **Close others**,
   **Close to the right** and **Close all**.
   Closing tabs with unsaved edits lists them and asks first.
@@ -496,7 +501,8 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   and switching views or tabs puts it back at half and half.
   At 720 px wide or less, the preview sits under the source.
 - **Preview:** the rendered document alone.
-- **Rendering:** CommonMark with tables, strikethrough and auto-linked URLs.
+- **Rendering:** CommonMark with tables, strikethrough and auto-linked URLs;
+  a table column keeps the alignment of its delimiter row.
   Raw HTML renders, sanitised with DOMPurify as GitHub does:
   `<img>`, `<p align>`, `<div align>`, `<details>` and `<summary>`, `<kbd>`, `<sub>`, `<sup>`, `<mark>`, `<ins>`, `<del>`,
   `<picture>` and tables show, while scripts, event handlers, styles, frames, objects, forms and `javascript:` addresses are dropped.
@@ -538,6 +544,16 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
 - **Export PDF:** opens the print dialog for the rendered document once its images have loaded,
   waiting 10 seconds at most, with its diagrams drawn as in **Export HTML** and web images as their placeholder;
   pick **Save as PDF**.
+- **Convert to HTML:** the toolbar button, in every view, and **Convert Markdown to HTML** in the context menus
+  open the document as a standalone HTML page in a tab of its own, such as `notes.md.converted.html`,
+  which **Save** writes next to the Markdown file; the toolbar button takes the editor's text, unsaved edits included.
+  The page has a title from the first heading or the file name, **Export HTML**'s style sheet,
+  and the body the preview renders, sanitised, without its copy buttons.
+  Links and image paths stay as written, so the page reads its pictures from beside it.
+  Mermaid diagrams become their pictures, as **Export HTML** draws them, carrying their source,
+  so the page shows them with no script and converting it back gives the ` ```mermaid ` blocks again;
+  converting back gives the same Markdown for the common constructs.
+  See [Markdown](Markdown.md#convert-to-html).
 - **Compare with…:** a document-style diff in a new diff tab; see [Compare](Compare.md).
 - See [Markdown](Markdown.md).
 
@@ -557,6 +573,7 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
 - **Preview:** the page as a browser draws it, with its scripts running: `<script>` elements, event handlers,
   `javascript:` links, timers and dialogs, so buttons, tabs and menus a script drives work,
   such as those of a page saved by a Markdown compare's **Export HTML**.
+  The page's copy buttons copy through the studio on a click or key press, with a `Copied from the page.` toast.
   A form's `submit` handlers run too, while the submission goes nowhere.
   The page runs in the extension's sandbox page, with an origin of its own and no network:
   it can't reach the studio, the workspace, the extension or the web, and its styles stay apart from the studio's.
@@ -574,6 +591,17 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   and when a style sheet, script or image it uses changes on disk, running its scripts afresh and keeping the scroll.
 - **Copy formatted:** the toolbar's button copies the page as written, as HTML with its text,
   its workspace pictures inside it, and without its scripts, style sheets, forms and controls.
+- **Convert to Markdown:** the toolbar button, in every view, and **Convert HTML to Markdown** in the context menus
+  open the page as Markdown in a tab of its own, such as `page.html.converted.md`,
+  which **Save** writes next to the page; the toolbar button takes the editor's text, unsaved edits included.
+  Headings, paragraphs, emphasis, strikethrough, code, code blocks with their language, lists, task lists, tables,
+  links, images with their relative paths, quotes, rules and line breaks become Markdown;
+  `<details>`, `<sub>`, `<sup>`, `<kbd>`, `<mark>` and `<ins>` stay as HTML, as GitHub shows them;
+  Mermaid diagrams become ` ```mermaid ` blocks;
+  alignment, colours and other styling keep only their text;
+  and the head, scripts, styles, comments, handlers, frames, media and form fields are dropped.
+  The page's title heads the Markdown when it has no `<h1>`.
+  See [Editor](Editor.md#convert-to-markdown).
 - See [Editor](Editor.md#html).
 
 ## Compare
@@ -622,7 +650,8 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   **Export HTML** downloads a page of its own with the same side-by-side diff, light or dark as the system prefers,
   and its own **Diff**, **Before**, **After** bar with `p`, `n`, `↑` and `↓`;
   a Markdown diff's page is the Markdown diff page itself, in light,
-  whose `↑` and `↓` are buttons, with `n` and `p` for keys.
+  whose `↑` and `↓` are buttons, with `n` and `p` for keys,
+  and whose **Enlarge** shows a diagram in a dialog over the page, where a click zooms in and out.
   Both work for every kind, Markdown included, named such as `orders-vs-orders-v2.diff.json`,
   and show the diff as the tab does, rules and all.
   The page fetches nothing and opens from disk offline; nothing is written into the workspace.
@@ -670,7 +699,9 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
 - **Markdown diff:** a rendered document with insertions and deletions, a **Changes** index that jumps to each change,
   a **Diff**, **Before**, **After** view bar, change stepping with its `↑` and `↓` buttons or the `n` and `p` keys,
   a side-by-side modal from `⇄` or a click on a change, with `←`, `→`, `Esc` and a magnifier for diagrams,
-  **Before** and **After** tabs on changed Mermaid diagrams, and **Copy Mermaid**, **Copy table** and **Enlarge**.
+  **Before** and **After** tabs on changed Mermaid diagrams, and **Copy Mermaid**, **Copy table** and **Enlarge**,
+  which shows the diagram in a dialog over the diff, as the exported page does:
+  it fits the window, a click zooms in around the pointer and out again, and `Esc`, `✕` or a click beside it closes it.
 - **Row diff:** CSV, TSV, Excel and OpenDocument spreadsheet rows paired by key columns in one full-width aligned table, with placeholder rows and columns
   and highlighted changed cells; the bar steps row by row, and through each changed cell.
   The `Match: id · Sort rows: none` toolbar button picks the key and sort columns;
@@ -1002,7 +1033,7 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   Exports, such as a diff's **Export JSON** and **Export HTML**, are downloads made only when you ask.
 - **Offline content security policy:** pages may load scripts and connect only to the extension itself,
   and images only from the extension, `data:` and `blob:`.
-  The HTML preview's sandbox page connects nowhere and loads nothing from the web.
+  The HTML preview's sandbox page connects only to its own `data:` and `blob:` URLs and loads nothing from the web.
 - **Remote images:** Markdown and HTML images with a web address show a placeholder with the address instead of loading.
 - **Sanitised Markdown:** raw HTML in Markdown is sanitised with DOMPurify; nothing in it runs.
 - **Sandboxed HTML:** an HTML file's preview runs the page's scripts in the extension's sandbox page,
@@ -1011,7 +1042,8 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   so the page reaches neither the studio, its files, the extension nor the web.
 - **Only the folders you pick:** files are read and written only inside workspaces you choose.
 - **Clipboard on your click:** the clipboard is read only when you pick **Paste from clipboard**, a compare's clipboard side
-  or **Paste**, and written only when you copy; what is read stays in the tab.
+  or **Paste**, and written only when you copy, with a page's copy button in an HTML preview included;
+  what is read stays in the tab.
 - See [Privacy](Privacy.md).
 
 ## Not supported
@@ -1047,6 +1079,12 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   becomes a line that says so, more than 100,000 table rows, and **Copy raw** or **Copy content to clipboard**
   of a file over 64 MB read from disk.
 - What an HTML page's scripts draw, in its **Copy formatted**: the page copies as written.
+- What an HTML page's scripts draw, and what its style sheets make of its elements, in **Convert HTML to Markdown**:
+  the page converts as written.
+- In **Convert HTML to Markdown**: nested tables, cells spanning rows and blocks in a table cell, which GitHub's tables can't hold,
+  and the alignment, colours and fonts of text, which keeps only its words.
+- In **Convert Markdown to HTML**: workspace pictures inside the page, which stay paths to the files beside it,
+  and links to `.md` files changed to lead to their converted pages.
 - A keyboard shortcut for the copy buttons: `Ctrl+C` copies the selection.
 - Choosing where a diff export goes: **Export JSON** and **Export HTML** save to Chrome's downloads, as Chrome is set to.
 - Keeping the Word preview's **Find in document…** query when you come back to the tab, as the PDF preview does.
@@ -1079,7 +1117,7 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
 - Rich-text paste in **Editor** and **Split**: they always paste plain text; only **Interactive** turns HTML into Markdown.
 - Pasting files copied on the desktop, or the formatting of copied text, with **Paste from clipboard**:
   it opens the plain text, or else a picture.
-- Checkboxes for Markdown task lists in **Preview**, **Split**, the exports and **Copy formatted**:
+- Checkboxes for Markdown task lists in **Preview**, **Split**, the exports, **Copy formatted** and **Convert to HTML**:
   `[ ]` and `[x]` stay as text there; only **Interactive** draws them.
 - A **Split** ratio kept across views and tabs: switching views or tabs puts it back at half and half.
 - An undo history list: the editor bar has only the **Undo** and **Redo** buttons.
@@ -1099,6 +1137,7 @@ Opening a Markdown or HTML file shows **Preview**, and a file made with **New fi
   Trusted Types policies of the page's own, which the sandbox page keeps to itself;
   sending a form anywhere: its `submit` handlers run, but the submission goes nowhere;
   opening a new window or tab from the page's script;
+  reading the clipboard from the page's script, and copying from it without a click or a key press;
   the page's own storage, such as `localStorage`, `IndexedDB` and cookies, which the sandbox page has none of;
   and moving the page to another address from its script, which draws it again instead.
 - Raw HTML in Markdown's **Interactive** view, which stays as text, and following links in either **Interactive** view:

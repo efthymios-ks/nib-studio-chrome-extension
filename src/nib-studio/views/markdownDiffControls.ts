@@ -1,8 +1,8 @@
+import { DIAGRAM_ZOOM } from '../../common/markdown/diff/htmlRenderer.js';
 import { copyTextAsync } from '../app/clipboard.js';
 
 const STORAGE_KEY = 'md-diff-view';
 const VIEWS: ReadonlyArray<string> = Object.freeze(['diff', 'before', 'after']);
-const LOUPE_ZOOM = 2.5;
 const FLASH_MS = 1600;
 const POSITION_HOLD_MS = 1000;
 const COPIED_MS = 1200;
@@ -49,6 +49,7 @@ export function attachMarkdownDiffControls(frameDocument: Document, options?: Ma
     let lensImage: HTMLImageElement | null = null;
     let pointer: { x: number; y: number } | null = null;
     let scrollPending = false;
+    const zoom = createDiagramZoom(frameDocument, frameWindow, () => modal.hidden === true);
 
     const isVisible = (element: Element): boolean => element.getClientRects().length > 0;
 
@@ -253,8 +254,8 @@ export function attachMarkdownDiffControls(frameDocument: Document, options?: Ma
         const rect = image.getBoundingClientRect();
         lens.style.left = `${x - lens.offsetWidth / 2}px`;
         lens.style.top = `${y - lens.offsetHeight / 2}px`;
-        lens.style.backgroundSize = `${rect.width * LOUPE_ZOOM}px ${rect.height * LOUPE_ZOOM}px`;
-        lens.style.backgroundPosition = `${lens.clientWidth / 2 - (x - rect.left) * LOUPE_ZOOM}px ${lens.clientHeight / 2 - (y - rect.top) * LOUPE_ZOOM}px`;
+        lens.style.backgroundSize = `${rect.width * DIAGRAM_ZOOM}px ${rect.height * DIAGRAM_ZOOM}px`;
+        lens.style.backgroundPosition = `${lens.clientWidth / 2 - (x - rect.left) * DIAGRAM_ZOOM}px ${lens.clientHeight / 2 - (y - rect.top) * DIAGRAM_ZOOM}px`;
     };
 
     const toggleLoupe = (): void => {
@@ -362,13 +363,12 @@ export function attachMarkdownDiffControls(frameDocument: Document, options?: Ma
         })();
     };
 
-    // Opens the diagram image in a new tab without fetching it.
+    // Shows the diagram in the page's own dialog, over the page, as the exported page does.
     const enlarge = (button: Element): void => {
         const image = button.closest('.md-pane, .md-diff, .md-mermaid')?.querySelector<HTMLImageElement>('img');
-        const blob = image == null ? null : dataUrlToBlob(image.src);
 
-        if (blob != null) {
-            openBlobInNewTab(blob);
+        if (image != null) {
+            zoom?.open(image);
         }
     };
 
@@ -399,6 +399,12 @@ export function attachMarkdownDiffControls(frameDocument: Document, options?: Ma
         const target = event.target as Element | null;
 
         if (target == null || typeof target.closest !== 'function') {
+            return;
+        }
+
+        if (zoom?.isOpen() === true) {
+            zoom.click(event);
+
             return;
         }
 
@@ -478,6 +484,16 @@ export function attachMarkdownDiffControls(frameDocument: Document, options?: Ma
 
     const onKeyDown = (event: KeyboardEvent): void => {
         if (event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+
+        // Esc closes the enlarged diagram alone, leaving the side-by-side compare under it open.
+        if (zoom?.isOpen() === true) {
+            if (event.key === 'Escape') {
+                zoom.close();
+                event.preventDefault();
+            }
+
             return;
         }
 
@@ -638,17 +654,124 @@ export function openBlobInNewTab(blob: Blob): void {
     window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_LIFETIME_MS);
 }
 
-function dataUrlToBlob(url: string): Blob | null {
-    const match = /^data:([^;,]+)(;base64)?,(.*)$/s.exec(url);
+// Enlarge's dialog over the diff page, driven from here as the exported page's own script drives it:
+// the diagram fits the window, a click zooms in around the pointer and the next fits it again,
+// and Esc, ✕ or a click outside the diagram closes it. The picture is the diagram's own data: image, so nothing loads.
+interface DiagramZoom {
+    readonly isOpen: () => boolean;
+    readonly open: (picture: HTMLImageElement) => void;
+    readonly close: () => void;
+    // A click while the dialog is open.
+    readonly click: (event: MouseEvent) => void;
+}
 
-    if (match == null) {
+function createDiagramZoom(
+    frameDocument: Document,
+    frameWindow: Window,
+    isModalHidden: () => boolean,
+): DiagramZoom | null {
+    const dialog = frameDocument.querySelector<HTMLDialogElement>('.md-zoom');
+    const body = dialog?.querySelector<HTMLElement>('.md-zoom-body');
+
+    if (dialog == null || body == null) {
         return null;
     }
 
-    const [, type, base64, payload] = match;
-    const bytes = base64 != null
-        ? Uint8Array.from(atob(payload ?? ''), (character) => character.charCodeAt(0))
-        : new TextEncoder().encode(decodeURIComponent(payload ?? ''));
+    const root = frameDocument.documentElement;
+    let image: HTMLImageElement | null = null;
+    let size = { width: 4, height: 3 };
 
-    return new Blob([bytes], { type });
+    const fit = (): void => {
+        const style = frameWindow.getComputedStyle(body);
+        const width = body.clientWidth - pixels(style.paddingLeft) - pixels(style.paddingRight);
+        const height = body.clientHeight - pixels(style.paddingTop) - pixels(style.paddingBottom);
+        const scale = Math.min(width / size.width, height / size.height);
+
+        if (image == null || !Number.isFinite(scale)) {
+            return;
+        }
+
+        image.style.width = `${Math.max(1, Math.floor(size.width * scale))}px`;
+        body.scrollLeft = 0;
+        body.scrollTop = 0;
+    };
+
+    const open = (picture: HTMLImageElement): void => {
+        const rect = picture.getBoundingClientRect();
+        size = {
+            width: [rect.width, picture.naturalWidth].find((value) => value > 0) ?? 4,
+            height: [rect.height, picture.naturalHeight].find((value) => value > 0) ?? 3,
+        };
+        image?.remove();
+        image = frameDocument.createElement('img');
+        image.alt = 'Enlarged diagram';
+        image.setAttribute('src', picture.getAttribute('src') ?? '');
+        body.append(image);
+        dialog.classList.remove('md-zoom-in');
+        dialog.showModal();
+        root.classList.add('md-locked');
+        fit();
+    };
+
+    // Zooms in keeping the point under the pointer where it is, or fits the diagram to the window again.
+    const toggle = (event: MouseEvent): void => {
+        if (image == null) {
+            return;
+        }
+
+        const rect = image.getBoundingClientRect();
+        const x = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0.5;
+        const y = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0.5;
+
+        if (!dialog.classList.toggle('md-zoom-in')) {
+            fit();
+
+            return;
+        }
+
+        image.style.width = `${rect.width * DIAGRAM_ZOOM}px`;
+        const zoomed = image.getBoundingClientRect();
+        body.scrollLeft += zoomed.left + x * zoomed.width - event.clientX;
+        body.scrollTop += zoomed.top + y * zoomed.height - event.clientY;
+    };
+
+    dialog.addEventListener('close', () => {
+        image?.remove();
+        image = null;
+
+        if (isModalHidden()) {
+            root.classList.remove('md-locked');
+        }
+    });
+    frameWindow.addEventListener('resize', () => {
+        if (dialog.open && !dialog.classList.contains('md-zoom-in')) {
+            fit();
+        }
+    });
+
+    return {
+        isOpen: () => dialog.open,
+        open,
+        close: () => dialog.close(),
+        click: (event) => {
+            const target = event.target as Element;
+
+            if (target === image) {
+                toggle(event);
+
+                return;
+            }
+
+            // A click on the backdrop outside the box lands on the dialog itself.
+            if (target === dialog || target === body || target.closest('.md-zoom-x') != null) {
+                dialog.close();
+            }
+        },
+    };
+}
+
+function pixels(value: string): number {
+    const number = Number.parseFloat(value);
+
+    return Number.isNaN(number) ? 0 : number;
 }

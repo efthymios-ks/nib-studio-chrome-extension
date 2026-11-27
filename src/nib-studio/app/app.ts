@@ -158,10 +158,40 @@ import { createLookupBox, type LookupBox } from '../lookup/lookupBox.js';
 import { createLookupClient, createLookupWorker, type LookupClient } from '../lookup/lookupClient.js';
 import { readPdfTextAsync } from '../lookup/lookupPdfText.js';
 import { requestPreviewFind } from '../views/previewFindRequests.js';
+import { renderMermaidImageAsync } from '../views/diagramImage.js';
+import { htmlDocumentToMarkdown } from '../editor/htmlToMarkdown.js';
+import { markdownToHtmlDocumentAsync } from '../../common/markdown/markdownToHtml.js';
 
 const CONFIG_WRITE_DEBOUNCE_MS = 400;
 const WATCH_REFRESH_DEBOUNCE_MS = 150;
 const COPY_CONTENT_WARN_BYTES = 10 * 1024 * 1024;
+
+// The format Convert HTML to Markdown and Convert Markdown to HTML convert a document to.
+type DocumentFormat = 'markdown' | 'html';
+
+interface DocumentConversion {
+    readonly extension: string;
+    readonly formatName: string;
+    // The document's text in the other format; the file name titles a page that has no heading.
+    readonly convertAsync: (text: string, fileName: string) => Promise<string>;
+}
+
+const DOCUMENT_CONVERSIONS: Readonly<Record<DocumentFormat, DocumentConversion>> = Object.freeze({
+    markdown: {
+        extension: 'md',
+        formatName: 'Markdown',
+        convertAsync: async (text: string) => htmlDocumentToMarkdown(text),
+    },
+    html: {
+        extension: 'html',
+        formatName: 'HTML',
+        // Mermaid diagrams are drawn as Export HTML draws them, so the page shows them offline with no script.
+        convertAsync: async (text: string, fileName: string) => await markdownToHtmlDocumentAsync(text, {
+            fileName,
+            drawDiagramAsync: renderMermaidImageAsync,
+        }),
+    },
+});
 
 // The Lookup index of the open workspace, started the first time its box takes focus.
 interface LookupSession {
@@ -825,6 +855,8 @@ export class App {
                 onSavePdfPages: (path, open) => void this.savePdfPagesAsync(path, open),
                 onOpenLink: (target) => void this.openWorkspaceLinkAsync(target),
                 onConvertJsonToYaml: (path, text) => this.convertJsonTextToYaml(path, text),
+                onConvertHtmlToMarkdown: (path, text) => void this.convertDocumentTextAsync(path, text, 'markdown'),
+                onConvertMarkdownToHtml: (path, text) => void this.convertDocumentTextAsync(path, text, 'html'),
                 diffTab: {
                     onSetSide: (tabId, side, target) => this.setDiffSide(tabId, side, target),
                     onClearSide: (tabId, side) => this.updateDiffTab(tabId, (tab) => setDiffTabSide(tab, side, null)),
@@ -2517,6 +2549,80 @@ export class App {
         }
     }
 
+    // Convert HTML to Markdown and Convert Markdown to HTML in the context menus: the tab's text as it is now,
+    // unsaved edits included, or the file as saved on disk when it has no tab.
+    private async convertDocumentFileAsync(path: string, format: DocumentFormat): Promise<void> {
+        const state = this.store.getState();
+        const open = state.openFiles.find((file) => file.path === path);
+
+        if (open != null) {
+            await this.convertDocumentAsync({ path, text: open.text, lineEnding: open.lineEnding, format });
+
+            return;
+        }
+
+        if (state.workspace == null) {
+            return;
+        }
+
+        try {
+            const file = await readFileAsync(state.workspace.handle, path);
+            await this.convertDocumentAsync({
+                path,
+                text: normalizeLineEndings(file.text),
+                lineEnding: detectLineEnding(file.text),
+                format,
+            });
+        }
+        catch (error) {
+            toast(errorMessage(error, 'Conversion failed.'), 'fail');
+        }
+    }
+
+    // Convert to Markdown and Convert to HTML in the toolbar: the editor's text, unsaved edits included.
+    private async convertDocumentTextAsync(
+        path: string,
+        editorText: string,
+        format: DocumentFormat,
+    ): Promise<void> {
+        const open = this.store.getState().openFiles.find((file) => file.path === path);
+
+        if (open == null || isExternalPath(path)) {
+            return;
+        }
+
+        await this.convertDocumentAsync({
+            path,
+            text: normalizeLineEndings(editorText),
+            lineEnding: open.lineEnding,
+            format,
+        });
+    }
+
+    // Opens the document in the other format in a tab of its own, such as `page.html.converted.md`.
+    private async convertDocumentAsync(source: {
+        readonly path: string;
+        readonly text: string;
+        readonly lineEnding: LineEnding;
+        readonly format: DocumentFormat;
+    }): Promise<void> {
+        const conversion = DOCUMENT_CONVERSIONS[source.format];
+
+        try {
+            const converted = await conversion.convertAsync(source.text, basename(source.path));
+            this.openConvertedTab({
+                sourcePath: source.path,
+                extension: conversion.extension,
+                text: converted,
+                lineEnding: source.lineEnding,
+                formatName: conversion.formatName,
+            });
+        }
+        catch (error) {
+            toast(errorMessage(error, 'Conversion failed.'), 'fail');
+        }
+    }
+
     // Opens a conversion in a tab named after its source, such as `orders.xml.converted.json`, in the Editor view.
     // It saves next to the source, with the line ending of the source; converting again replaces its text.
     // Until it is saved it isn't on disk, so it counts as unsaved, with Save to press.
@@ -3941,6 +4047,54 @@ export class App {
                     }
 
                     void this.convertJsonToYamlAsync(path);
+                },
+            },
+            {
+                id: 'convert-html-to-markdown',
+                label: 'Convert HTML to Markdown',
+                appearsIn: 'both',
+                group: 5,
+                // The converted tab saves next to the source, which a file from outside the workspace doesn't have.
+                enabledWhen: (context) => {
+                    const path = firstSelected(context) ?? context.activeTabPath;
+
+                    return path != null
+                        && context.fileTypeId(path) === 'html'
+                        && context.isFile(path)
+                        && !isExternalPath(path);
+                },
+                run: (context) => {
+                    const path = firstSelected(context) ?? context.activeTabPath;
+
+                    if (path == null) {
+                        return;
+                    }
+
+                    void this.convertDocumentFileAsync(path, 'markdown');
+                },
+            },
+            {
+                id: 'convert-markdown-to-html',
+                label: 'Convert Markdown to HTML',
+                appearsIn: 'both',
+                group: 5,
+                // The converted tab saves next to the source, which a file from outside the workspace doesn't have.
+                enabledWhen: (context) => {
+                    const path = firstSelected(context) ?? context.activeTabPath;
+
+                    return path != null
+                        && context.fileTypeId(path) === 'markdown'
+                        && context.isFile(path)
+                        && !isExternalPath(path);
+                },
+                run: (context) => {
+                    const path = firstSelected(context) ?? context.activeTabPath;
+
+                    if (path == null) {
+                        return;
+                    }
+
+                    void this.convertDocumentFileAsync(path, 'html');
                 },
             },
             {

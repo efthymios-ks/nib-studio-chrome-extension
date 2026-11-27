@@ -147,16 +147,68 @@ describe('attachMarkdownDiffControls', () => {
         expect(frame.querySelector('.md-modal')?.hasAttribute('hidden')).toBe(true);
     });
 
-    it('copies Mermaid source and enlarges the diagram', async () => {
-        const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    it('copies Mermaid source', async () => {
         await loadDiffDocumentAsync();
 
         click('.md-copy');
         await Promise.resolve();
         expect(writeText).toHaveBeenCalledWith(expect.stringContaining('flowchart LR'));
+    });
+
+    it('enlarges the diagram in the page\'s own dialog, as the exported page does, with no window of its own', async () => {
+        const open = vi.spyOn(window, 'open').mockReturnValue(null);
+        const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
+        const frame = await loadDiffDocumentAsync();
+        const zoom = frame.querySelector<HTMLDialogElement>('.md-zoom')!;
+        const picture = frame.querySelector('.md-enlarge')?.closest('.md-pane, .md-diff, .md-mermaid')?.querySelector('img');
+
+        expect(zoom.open).toBe(false);
+        expect(picture?.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
 
         click('.md-enlarge');
-        expect(open).toHaveBeenCalledWith(expect.stringMatching(/^blob:/), '_blank', 'noopener');
+        const shown = zoom.querySelector('img');
+
+        expect(zoom.open).toBe(true);
+        expect(shown?.getAttribute('src')).toBe(picture?.getAttribute('src'));
+        expect(shown?.getAttribute('alt')).toBe('Enlarged diagram');
+        expect(frame.documentElement.classList.contains('md-locked')).toBe(true);
+
+        // A click on the diagram zooms in around the pointer, and the next one fits it to the window again.
+        shown?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 12, clientY: 8 }));
+        expect(zoom.classList.contains('md-zoom-in')).toBe(true);
+
+        shown?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(zoom.classList.contains('md-zoom-in')).toBe(false);
+
+        click('.md-zoom-x');
+        expect(zoom.open).toBe(false);
+        expect(zoom.querySelector('img')).toBeNull();
+        expect(frame.documentElement.classList.contains('md-locked')).toBe(false);
+
+        // A click outside the diagram, on the dialog's backdrop, closes it, and so does Esc.
+        click('.md-enlarge');
+        zoom.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(zoom.open).toBe(false);
+
+        click('.md-enlarge');
+        frame.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(zoom.open).toBe(false);
+        expect(frame.querySelector<HTMLElement>('.md-modal')?.hidden).toBe(true);
+        expect(open).not.toHaveBeenCalled();
+        expect(createObjectUrl).not.toHaveBeenCalled();
+    });
+
+    it('keeps the side-by-side compare open when Esc closes an enlarged diagram over it', async () => {
+        const frame = await loadDiffDocumentAsync();
+        const zoom = frame.querySelector<HTMLDialogElement>('.md-zoom')!;
+
+        click('.md-review');
+        click('.md-enlarge');
+        frame.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+        expect(zoom.open).toBe(false);
+        expect(frame.querySelector<HTMLElement>('.md-modal')?.hidden).toBe(false);
+        expect(frame.documentElement.classList.contains('md-locked')).toBe(true);
     });
 
     it('labels the controls in the UI language', async () => {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SANDBOX_CHANNEL } from '../../common/html/sandboxMessages.js';
+import { PAGE_COPY_NEEDS_GESTURE, SANDBOX_CHANNEL } from '../../common/html/sandboxMessages.js';
 import { asRoot, FakeDirectoryHandle, type FakeFileHandle } from '../../common/fs/testing/fakeFileSystem.js';
+import { stubClipboard, type FakeClipboard } from '../testing/fakeClipboard.js';
 import { drawSandboxPage, fakeSandboxPage, type FakeSandboxPage } from '../testing/sandboxFrames.js';
 import { settleAsync } from '../testing/testHelpers.js';
 import { mountHtmlPreview, type HtmlPreviewHandle, type HtmlPreviewOptions } from './htmlPreview.js';
@@ -331,6 +332,96 @@ describe('mountHtmlPreview', () => {
         const sandbox = await shownAsync('<p><img src="photo.heic" alt="Photo"></p>');
 
         expect(parse(sandbox.page()).querySelector('.nib-image-placeholder')?.textContent).toBe('Nib Studio doesn\'t decode HEIC pictures.');
+    });
+
+    describe('copies the page asks for', () => {
+        let clipboard: FakeClipboard | null = null;
+
+        afterEach(() => {
+            clipboard?.restore();
+            clipboard = null;
+            Reflect.deleteProperty(navigator, 'userActivation');
+        });
+
+        const copy = (sandbox: FakeSandboxPage, id: number, content: Readonly<Record<string, unknown>>, isActive = true): void => {
+            sandbox.post({ channel: SANDBOX_CHANNEL, type: 'copy', id, isActive, content });
+        };
+
+        const answers = (sandbox: FakeSandboxPage): unknown[] => sandbox.received.filter((message) => message.type === 'copied');
+
+        it('puts text the shown page copies on a click on the clipboard, says so, and tells the page it is done', async () => {
+            clipboard = stubClipboard();
+            const sandbox = await shownAsync('<p>one</p>');
+
+            copy(sandbox, 1, { 'text/plain': 'flowchart LR\n    A --> B' });
+            await settleAsync();
+
+            expect(clipboard.writeText).toHaveBeenCalledWith('flowchart LR\n    A --> B');
+            expect(toastTexts()).toContain('Copied from the page.');
+            expect(answers(sandbox)).toEqual([{ channel: SANDBOX_CHANNEL, type: 'copied', id: 1, error: null }]);
+        });
+
+        it('puts a rich copy\'s text, HTML and PNG picture on the clipboard as one item', async () => {
+            clipboard = stubClipboard();
+            const sandbox = await shownAsync('<p>one</p>');
+            const picture = new Blob(['png bytes'], { type: 'image/png' });
+
+            copy(sandbox, 2, { 'text/plain': 'Hi', 'text/html': '<b>Hi</b>', 'image/png': picture });
+            await settleAsync();
+
+            expect(clipboard.writeText).not.toHaveBeenCalled();
+            expect([...clipboard.last()]).toEqual([['text/plain', 'Hi'], ['text/html', '<b>Hi</b>'], ['image/png', 'png bytes']]);
+            expect(answers(sandbox)).toEqual([{ channel: SANDBOX_CHANNEL, type: 'copied', id: 2, error: null }]);
+        });
+
+        it('writes nothing without a click or key press, in the page or reaching the studio, nor for a page still loading', async () => {
+            clipboard = stubClipboard();
+            const sandbox = await shownAsync('<p>one</p>');
+
+            copy(sandbox, 1, { 'text/plain': 'page alone' }, false);
+            Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false } });
+            copy(sandbox, 2, { 'text/plain': 'studio not active' });
+            Reflect.deleteProperty(navigator, 'userActivation');
+            handle!.update('<p>two</p>');
+            await settleAsync();
+            const next = fakeSandboxPage(frames()[0]!);
+            copy(next, 3, { 'text/plain': 'still loading' });
+            await settleAsync();
+
+            expect(clipboard.writes).toEqual([]);
+            expect(toastTexts()).not.toContain('Copied from the page.');
+            expect(answers(sandbox)).toEqual([
+                { channel: SANDBOX_CHANNEL, type: 'copied', id: 1, error: PAGE_COPY_NEEDS_GESTURE },
+                { channel: SANDBOX_CHANNEL, type: 'copied', id: 2, error: PAGE_COPY_NEEDS_GESTURE },
+            ]);
+            expect(answers(next)).toEqual([{ channel: SANDBOX_CHANNEL, type: 'copied', id: 3, error: PAGE_COPY_NEEDS_GESTURE }]);
+        });
+
+        it('takes a copy only from its own frame, from the opaque origin, in a known shape', async () => {
+            clipboard = stubClipboard();
+            const sandbox = await shownAsync('<p>one</p>');
+            const stranger = { postMessage: vi.fn() } as unknown as Window;
+            const data = { channel: SANDBOX_CHANNEL, type: 'copy', id: 1, isActive: true, content: { 'text/plain': 'x' } };
+
+            window.dispatchEvent(new MessageEvent('message', { data, origin: 'null', source: stranger }));
+            sandbox.post(data, 'chrome-extension://abc');
+            sandbox.post({ ...data, content: { 'text/uri-list': 'https://example.com/' } });
+            await settleAsync();
+
+            expect(clipboard.writes).toEqual([]);
+            expect(answers(sandbox)).toEqual([]);
+        });
+
+        it('tells the page why its copy failed, and says so in a toast', async () => {
+            clipboard = stubClipboard({ failWith: new DOMException('Document is not focused.', 'NotAllowedError') });
+            const sandbox = await shownAsync('<p>one</p>');
+
+            copy(sandbox, 1, { 'text/plain': 'text' });
+            await settleAsync();
+
+            expect(toastTexts()).toContain('Could not copy: Document is not focused.');
+            expect(answers(sandbox)).toEqual([{ channel: SANDBOX_CHANNEL, type: 'copied', id: 1, error: 'Document is not focused.' }]);
+        });
     });
 
     it('stops listening to the page once let go', async () => {

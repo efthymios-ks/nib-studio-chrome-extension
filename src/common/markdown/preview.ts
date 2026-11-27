@@ -61,6 +61,20 @@ export function renderMarkdown(source: string, options: MarkdownRenderOptions = 
         }
     });
 
+    // A table column's alignment as the `align` attribute the sanitiser keeps, where markdown-it writes a style.
+    parser.core.ruler.push('nib-table-align', (state) => {
+        for (const token of state.tokens) {
+            const alignment = /text-align:\s*(left|center|right)/.exec(String(token.attrGet('style') ?? ''))?.[1];
+
+            if ((token.type !== 'th_open' && token.type !== 'td_open') || alignment == null) {
+                continue;
+            }
+
+            token.attrs = (token.attrs ?? []).filter(([name]) => name !== 'style');
+            token.attrSet('align', alignment);
+        }
+    });
+
     parser.renderer.rules.fence = (tokens, index) => {
         const token = tokens[index];
 

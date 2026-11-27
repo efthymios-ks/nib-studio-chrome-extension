@@ -38,7 +38,7 @@ Click the toolbar icon to open the studio; the interface is in English.
 - [Markdown](docs/Markdown.md): Interactive editing with the formatting shown, tables, code blocks and diagrams edited in place,
   split and preview, formatting buttons, list keys, paste from web pages and Word, Mermaid, code copy, heading ids,
   workspace images and links, sanitised raw HTML,
-  HTML and PDF export
+  HTML and PDF export, and conversion to an HTML page and back
 - [Compare](docs/Compare.md): diff tabs, Compare with…, the diff bar, text, JSON with array rules, YAML, XML, Markdown and row diffs,
   JSON and HTML exports
 - [Tables](docs/Tables.md): CSV, TSV and Excel grids with sheet tabs, sort, filters, search, columns, queries

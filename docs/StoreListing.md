@@ -36,7 +36,7 @@ Find anything
 Type in the Lookup box to find files by name or by what is inside them, Office documents and PDFs included, with a preview of each match.
 
 Edit
-A code editor with syntax colours, errors marked as you type, search and replace, multiple cursors, and an undo history that survives switching views. Markdown and HTML files also get an Interactive view that edits like a word processor, and a live preview with diagrams and pictures from your folder, where an HTML page runs its own scripts, sealed off from the network. Open what is on the clipboard in a tab of its own, and copy a document with its formatting, or a table as cells, ready to paste elsewhere.
+A code editor with syntax colours, errors marked as you type, search and replace, multiple cursors, and an undo history that survives switching views. Markdown and HTML files also get an Interactive view that edits like a word processor, and a live preview with diagrams and pictures from your folder, where an HTML page runs its own scripts, sealed off from the network. Turn a Markdown document into a web page, or a web page into Markdown. Open what is on the clipboard in a tab of its own, and copy a document with its formatting, or a table as cells, ready to paste elsewhere.
 
 Compare
 Compare any two files, or a file with the clipboard or pasted text, side by side. Structured data is compared by its structure, Markdown as a document and spreadsheets row by row, with a bar to step through the changes and an export to share the result.

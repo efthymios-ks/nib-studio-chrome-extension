@@ -1,12 +1,16 @@
+import { errorMessage } from '../../common/errorMessage.js';
 import { buildHtmlPreviewAsync } from '../../common/html/htmlPreviewDocument.js';
 import {
+    PAGE_COPY_NEEDS_GESTURE,
     readSandboxMessage,
     SANDBOX_CHANNEL,
+    type PageClipboardContent,
     type SandboxMessage,
     type ScrollPosition,
     type StudioMessage,
 } from '../../common/html/sandboxMessages.js';
 import type { LocalImageContext } from '../../common/markdown/localImages.js';
+import { copyFailureMessage, copyTypesAsync } from '../app/clipboard.js';
 import { h } from '../app/dom.js';
 import { toast } from '../app/toast.js';
 import { createDocumentResources } from './documentImages.js';
@@ -74,6 +78,7 @@ const SHOW_DELAY_MS = 1500;
 // How long a load of the frame may go unanswered before the frame counts as gone from its sandbox page.
 const LEAVE_DELAY_MS = 1000;
 const LEFT_MESSAGE = 'The page tried to go to another address, which the preview never follows, so it was drawn again.';
+const COPIED_MESSAGE = 'Copied from the page.';
 const JAVASCRIPT_ADDRESS = /^javascript:/i;
 const CONTROL_CHARACTERS = /[\t\n\r]/g;
 
@@ -123,6 +128,27 @@ export function mountHtmlPreview(pane: HTMLElement, text: string, options: HtmlP
 
     const sendReveal = (page: PageFrame, fragment: string): void => {
         send(page, { channel: SANDBOX_CHANNEL, type: 'reveal', fragment, isSmooth: !prefersReducedMotion() });
+    };
+
+    const answerCopy = (page: PageFrame, id: number, error: string | null): void => {
+        send(page, { channel: SANDBOX_CHANNEL, type: 'copied', id, error });
+    };
+
+    // Writes what the page asked for through the studio's own clipboard, which the sandbox frame has no access to,
+    // and tells the page how it went, so its promise resolves or rejects as the browser's would.
+    const copyForPageAsync = async (page: PageFrame, id: number, content: PageClipboardContent): Promise<void> => {
+        try {
+            await copyTypesAsync(content);
+        }
+        catch (error) {
+            toast(copyFailureMessage(error), 'fail');
+            answerCopy(page, id, errorMessage(error));
+
+            return;
+        }
+
+        toast(COPIED_MESSAGE, 'ok');
+        answerCopy(page, id, null);
     };
 
     const show = (page: PageFrame): void => {
@@ -214,6 +240,21 @@ export function mountHtmlPreview(pane: HTMLElement, text: string, options: HtmlP
             if (page === shown) {
                 options.onSave?.();
             }
+        },
+        // Only a click or a key press in the shown page copies, as only one follows a link;
+        // the sandbox page says whether one was behind the copy, and the studio's window must have seen it too.
+        copy: (page, message) => {
+            if (message.type !== 'copy') {
+                return;
+            }
+
+            if (page !== shown || !message.isActive || !isUserActive()) {
+                answerCopy(page, message.id, PAGE_COPY_NEEDS_GESTURE);
+
+                return;
+            }
+
+            void copyForPageAsync(page, message.id, message.content);
         },
         scroll: (page, message) => {
             if (page === shown && message.type === 'scroll') {

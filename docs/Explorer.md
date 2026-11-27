@@ -119,6 +119,8 @@ Commands that don't apply are left out of the menu; dividers separate the groups
 | Convert XML to JSON | | an XML file in the workspace | opens the JSON in a new tab `name.xml.converted.json` |
 | Convert YAML to JSON | | a YAML file in the workspace | opens the JSON in a new tab `name.yaml.converted.json` |
 | Convert JSON to YAML | | a JSON file in the workspace | opens the YAML in a new tab `name.json.converted.yaml` |
+| Convert HTML to Markdown | | an HTML file in the workspace | opens the page as Markdown in a new tab `name.html.converted.md`; see [Editor](Editor.md#convert-to-markdown) |
+| Convert Markdown to HTML | | a Markdown file in the workspace | opens the document as an HTML page in a new tab `name.md.converted.html`; see [Markdown](Markdown.md#convert-to-html) |
 | Compare XML with… | | an XML file | asks for the other file on disk and opens the diff in a new diff tab |
 | Save pages… | | one PDF selected | asks which pages, previews them and saves them as a new PDF beside it; see [Documents](Documents.md#save-pages) |
 | Refresh | | a workspace is open | rereads the tree from disk |

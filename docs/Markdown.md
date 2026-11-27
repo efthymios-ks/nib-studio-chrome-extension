@@ -2,7 +2,7 @@
 
 `.md`, `.markdown` and `.mdx` files open with four view tabs: **Editor**, **Interactive**, **Split** and **Preview**.  
 The toolbar also carries a `Markdown` badge and the **Copy raw**, **Copy formatted**, **Compare with…**,
-**Export HTML**, **Export PDF** and **Save** buttons.
+**Convert to HTML**, **Export HTML**, **Export PDF** and **Save** buttons.
 
 ## Views
 
@@ -220,6 +220,7 @@ with the markers of a formatted run it cuts added back, so a copied part of a bo
 Markdown renders with markdown-it:
 
 - CommonMark plus tables and strikethrough.
+- A table column keeps the alignment of its delimiter row, such as `:---:` or `---:`.
 - Bare URLs become links.
 - Raw HTML renders, sanitised; see [Raw HTML](#raw-html).
 - Single line breaks stay soft; a blank line starts a new paragraph.
@@ -358,6 +359,46 @@ Pick **Save as PDF** as the destination.
 Workspace images and Mermaid diagrams print as in the HTML export, without its 25 MB limit on images,
 so a diagram prints as a picture at twice its size, or as its error text when it can't be drawn,
 and web images show the same placeholder as in the preview.
+
+## Convert to HTML
+
+**Convert to HTML** in the toolbar, in every view, and **Convert Markdown to HTML** in the Explorer and tab context menus,
+turn the document into an HTML page in a tab of its own, named after the file, such as `notes.md.converted.html`,
+which opens in **Editor**.  
+The toolbar button converts the editor's text, unsaved edits included;
+the menu command converts the tab's text when the file is open, and the file as saved on disk when it isn't.  
+The new tab isn't on disk until **Save** writes it next to the Markdown file, with the Markdown file's line endings,
+and converting again replaces its text.  
+Both are left out for a file from outside the workspace, which has no folder to save next to.
+
+The page is a standalone HTML5 document:
+
+- `<!doctype html>`, `lang="en"`, the character set, the viewport, a `generator` meta tag that names Nib Studio,
+  and a `<title>` from the first heading, or from the file name without its extension when there is none.
+- The style sheet of [Export HTML](#export-html): light, 820 px wide, with styles for headings, code, tables and quotes.
+- The body the preview renders, sanitised as the preview's is, so scripts, handlers and styles in raw HTML are dropped;
+  see [Raw HTML](#raw-html).
+  The preview's copy buttons are left out.
+- Links and image paths stay as written, relative ones included, so the page reads its pictures from beside it.
+  Links to `.md` files stay as they are, and web images keep their addresses.
+- Heading ids, table column alignment and the `language-` class of a code block stay.
+- Each Mermaid diagram becomes its picture, the one **Export HTML** draws, so the page shows it offline with no script.
+  The picture sits in a `<div class="md-mermaid">` whose `data-mermaid-source` attribute holds the diagram's source,
+  which **Convert HTML to Markdown** turns back into the ` ```mermaid ` block.
+  A diagram that can't be drawn stays a `mermaid` code block.
+
+Converting the page back to Markdown gives the same Markdown for headings, paragraphs, emphasis, strikethrough, inline code,
+lists, task lists, tables, links, images, quotes, rules, line breaks, code blocks, diagrams and `<details>`.  
+Other ways of writing them come back in one way each, which shows the same:
+`*` bullets as `-`, underlined headings as `#` headings, `__bold__` as `**bold**`,
+and a paragraph's soft line breaks as spaces.  
+See [Convert to Markdown](Editor.md#convert-to-markdown).
+
+Not supported:
+
+- Workspace pictures inside the page: they stay paths to the files beside it, while **Export HTML** carries them inside.
+- Links to `.md` files changed to the converted pages: they lead to the Markdown files.
+- Checkboxes for task lists: `[ ]` and `[x]` stay as text, as in the preview.
 
 ## Copy
 

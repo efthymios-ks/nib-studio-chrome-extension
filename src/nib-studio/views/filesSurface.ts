@@ -61,6 +61,10 @@ export interface FilesSurfaceCallbacks {
     readonly onOpenLink?: (target: WorkspaceLinkTarget) => void;
     // Convert to YAML in a JSON file's toolbar, with the editor's text: opens the YAML in a tab of its own.
     readonly onConvertJsonToYaml?: (path: string, text: string) => void;
+    // Convert to Markdown in an HTML file's toolbar, with the editor's text: opens the Markdown in a tab of its own.
+    readonly onConvertHtmlToMarkdown?: (path: string, text: string) => void;
+    // Convert to HTML in a Markdown file's toolbar, with the editor's text: opens the HTML page in a tab of its own.
+    readonly onConvertMarkdownToHtml?: (path: string, text: string) => void;
     readonly diffTab: DiffTabCallbacks;
 }
 
@@ -166,6 +170,32 @@ const VIEW_TITLES: Readonly<Record<string, Readonly<Partial<Record<EditorMode, s
 
 // The modes with an Interactive view.
 const LIVE_MODES: ReadonlySet<EditorMode> = new Set(['markdown', 'html']);
+
+// The toolbar's conversion of a whole document to the other format, into a tab of its own, by the file's type.
+interface DocumentConversion {
+    readonly typeId: FileTypeId;
+    readonly text: string;
+    readonly action: string;
+    readonly title: string;
+    readonly callback: 'onConvertHtmlToMarkdown' | 'onConvertMarkdownToHtml';
+}
+
+const DOCUMENT_CONVERSIONS: ReadonlyArray<DocumentConversion> = Object.freeze([
+    {
+        typeId: 'html',
+        text: 'Convert to Markdown',
+        action: 'convert-to-markdown',
+        title: 'Open this page as Markdown in a new tab, which saves next to it',
+        callback: 'onConvertHtmlToMarkdown',
+    },
+    {
+        typeId: 'markdown',
+        text: 'Convert to HTML',
+        action: 'convert-to-html',
+        title: 'Open this document as an HTML page in a new tab, which saves next to it',
+        callback: 'onConvertMarkdownToHtml',
+    },
+]);
 
 // Views that show an editor, and so the docked editor bar.
 const EDITOR_VIEWS = new Set(['editor', 'interactive', 'split']);
@@ -672,6 +702,26 @@ function buildToolbar(
             on: {
                 mousedown: keepEditorFocus,
                 click: () => applyXmlToJson(withEditorText(file), callbacks),
+            },
+        }));
+    }
+
+    // Convert to Markdown and Convert to HTML, in every view, with the tab's text as it is now. The new tab saves next
+    // to the file, which a file from outside the workspace doesn't have.
+    const documentConversion = isExternalPath(file.path)
+        ? null
+        : DOCUMENT_CONVERSIONS.find((conversion) => conversion.typeId === typeId);
+    const convert = documentConversion == null ? undefined : callbacks[documentConversion.callback];
+
+    if (documentConversion != null && convert != null) {
+        actionGroup.push(h('button', {
+            class: 'button',
+            text: documentConversion.text,
+            dataset: { action: documentConversion.action },
+            attrs: { type: 'button', title: documentConversion.title },
+            on: {
+                mousedown: keepEditorFocus,
+                click: () => convert(file.path, withEditorText(file).text),
             },
         }));
     }

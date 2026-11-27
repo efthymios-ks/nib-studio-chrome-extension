@@ -6,6 +6,7 @@ import {
     type ScrollPosition,
 } from '../common/html/sandboxMessages.js';
 import { registerSaveShortcutGuard } from './app/saveShortcut.js';
+import { bridgePageClipboard } from './sandboxClipboard.js';
 import { guardPageWindow, type PageMarkup } from './sandboxGuard.js';
 import { findTarget, scrollToTarget } from './views/fragmentScroll.js';
 
@@ -43,6 +44,7 @@ const PERCENT_ESCAPES = /(?:%[0-9a-f]{2})+/gi;
 // its first script; see `sandboxGuard.ts` for what the guard keeps from it.
 // Links leave through the studio, which opens them as a preview does;
 // in-page and `javascript:` links stay the page's.
+// The page's copies go through the studio too; see `sandboxClipboard.ts`.
 // A form's submission goes nowhere: its handlers run, and the page stays.
 // Any other move of the frame to another address meets the studio's `frame-src 'self'`,
 // so it never reaches the web.
@@ -58,6 +60,7 @@ export function startSandboxPage(options: SandboxPageOptions): void {
     let removeSaveGuard: (() => void) | null = null;
 
     const post = (message: SandboxMessage): void => studio.postMessage(message, studioOrigin);
+    const clipboard = bridgePageClipboard(page, post);
 
     const reveal = (target: PendingReveal): void => {
         const element = findTarget(page.document, target.fragment);
@@ -160,6 +163,12 @@ export function startSandboxPage(options: SandboxPageOptions): void {
         const message = readStudioMessage(event.data);
 
         if (message == null) {
+            return;
+        }
+
+        if (message.type === 'copied') {
+            clipboard.settle(message);
+
             return;
         }
 

@@ -93,6 +93,8 @@ function buildCallbacks(): CallbackMocks {
         onSavePdfPages: vi.fn(),
         onOpenLink: vi.fn(),
         onConvertJsonToYaml: vi.fn(),
+        onConvertHtmlToMarkdown: vi.fn(),
+        onConvertMarkdownToHtml: vi.fn(),
         diffTab: { onSetSide: vi.fn(), onSwap: vi.fn() },
     };
 }
@@ -341,6 +343,55 @@ describe('renderFilesSurface', () => {
 
             expect(exportMarkdownToHtmlAsync).toHaveBeenCalledWith(file, null);
             expect(exportMarkdownToPdfAsync).toHaveBeenCalledWith(file, null);
+        });
+
+        it('converts an HTML page to Markdown and Markdown to HTML with the editor\'s text, in every view', () => {
+            for (const view of ['editor', 'interactive', 'split', 'preview']) {
+                setFilesSurfaceView(view);
+                const page = openFileFixture('site/page.html', '<h1>Shop</h1>');
+                renderFilesSurface(container, stateFor([page], page), callbacks);
+
+                expect(buttonByText(container, 'Convert to HTML')).toBeUndefined();
+
+                buttonByText(container, 'Convert to Markdown')?.click();
+                const notes = openFileFixture('site/notes.md', '# Notes');
+                renderFilesSurface(container, stateFor([notes], notes), callbacks);
+
+                expect(buttonByText(container, 'Convert to Markdown')).toBeUndefined();
+
+                buttonByText(container, 'Convert to HTML')?.click();
+            }
+
+            expect(callbacks.onConvertHtmlToMarkdown.mock.calls).toEqual(Array.from({ length: 4 }, () => ['site/page.html', '<h1>Shop</h1>']));
+            expect(callbacks.onConvertMarkdownToHtml.mock.calls).toEqual(Array.from({ length: 4 }, () => ['site/notes.md', '# Notes']));
+            setFilesSurfaceView('editor');
+        });
+
+        it('converts what the editor holds, typed and not yet saved', () => {
+            const file = openFileFixture('notes.md', '# Notes');
+            renderFilesSurface(container, stateFor([file], file), callbacks);
+            const view = editorView(container);
+            view.dispatch({ changes: { from: view.state.doc.length, insert: '\n\nTyped.' } });
+
+            buttonByText(container, 'Convert to HTML')?.click();
+
+            expect(callbacks.onConvertMarkdownToHtml).toHaveBeenCalledWith('notes.md', '# Notes\n\nTyped.');
+        });
+
+        it('leaves the convert buttons off other files and off files from outside the workspace', () => {
+            const files = [
+                openFileFixture('data.json', '{}'),
+                openFileFixture('app.yaml', 'a: 1'),
+                openFileFixture('readme.txt', 'text'),
+                openFileFixture(externalTabPath(1, 'outside.html'), '<p>Outside</p>'),
+                openFileFixture(externalTabPath(2, 'outside.md'), '# Outside'),
+            ];
+
+            for (const file of files) {
+                renderFilesSurface(container, stateFor([file], file), callbacks);
+
+                expect(container.querySelector('[data-action="convert-to-markdown"], [data-action="convert-to-html"]')).toBeNull();
+            }
         });
     });
 

@@ -205,6 +205,39 @@ describe('startSandboxPage', () => {
         expect(links()).toEqual(['https://example.com/']);
     });
 
+    it('puts the page\'s copies through the studio during a click, and settles them only on the studio\'s answer', async () => {
+        Object.defineProperty(page.navigator, 'userActivation', { configurable: true, value: { isActive: true } });
+        start();
+        render();
+        const stranger = { postMessage: vi.fn() };
+
+        const written = page.navigator.clipboard.writeText('| a |\n| - |');
+        let isSettled = false;
+        void written.then(() => {
+            isSettled = true;
+        });
+        await Promise.resolve();
+
+        expect(posted().filter((message) => message.type === 'copy')).toEqual([{
+            channel: SANDBOX_CHANNEL,
+            type: 'copy',
+            id: 1,
+            isActive: true,
+            content: { 'text/plain': '| a |\n| - |' },
+        }]);
+
+        fromStudio({ channel: SANDBOX_CHANNEL, type: 'copied', id: 1, error: null }, stranger);
+        fromStudio({ channel: SANDBOX_CHANNEL, type: 'copied', id: 1, error: null }, studio, 'null');
+        await Promise.resolve();
+
+        expect(isSettled).toBe(false);
+
+        fromStudio({ channel: SANDBOX_CHANNEL, type: 'copied', id: 1, error: null });
+        await written;
+
+        expect(isSettled).toBe(true);
+    });
+
     it('saves on Ctrl+S unless the page takes the key itself', () => {
         start();
         render();

@@ -6,14 +6,20 @@ const ACCENT = '#1f6feb';
 export interface HtmlExportOptions {
     readonly title: string;
     readonly bodyHtml: string;
+    // The page's generator meta tag, for a page that says what wrote it.
+    readonly generator?: string;
 }
 
 export function buildStandaloneHtml(options: HtmlExportOptions): string {
+    const generator = options.generator == null
+        ? ''
+        : `\n    <meta name="generator" content="${escapeHtml(options.generator)}">`;
+
     return `<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">${generator}
     <title>${escapeHtml(options.title)}</title>
     <style>
         :root { color-scheme: light; }

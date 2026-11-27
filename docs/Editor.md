@@ -61,6 +61,8 @@ The commands act on that tab, which need not be the active one.
 | Convert XML to JSON | opens the JSON in a new tab |
 | Convert YAML to JSON | opens the JSON in a new tab, such as `app.yaml.converted.json` |
 | Convert JSON to YAML | opens the YAML in a new tab, such as `data.json.converted.yaml` |
+| Convert HTML to Markdown | opens the page as Markdown in a new tab, such as `page.html.converted.md`; see [Convert to Markdown](#convert-to-markdown) |
+| Convert Markdown to HTML | opens the document as an HTML page in a new tab, such as `notes.md.converted.html`; see [Markdown](Markdown.md#convert-to-html) |
 | Compare XML with… | asks for the other file on disk and opens the XML diff in a new diff tab |
 | Save pages… | on a PDF's tab, saves chosen pages as a new PDF; from outside the workspace a file picker asks where; see [Documents](Documents.md#save-pages) |
 | Close | closes the tab |
@@ -71,7 +73,8 @@ The commands act on that tab, which need not be the active one.
 **Close others**, **Close to the right** and **Close all** list every tab with unsaved edits, as `Unsaved` lines, and ask before closing.  
 **Reveal in Explorer** sits on its own at the top of the menu.  
 **Reveal in Explorer**, **Copy path to clipboard**, **Convert XML to JSON**,
-**Convert YAML to JSON** and **Convert JSON to YAML** work on tabs of workspace files;
+**Convert YAML to JSON**, **Convert JSON to YAML**, **Convert HTML to Markdown** and **Convert Markdown to HTML**
+work on tabs of workspace files;
 they are left out of the menu on the tab of a file from outside the workspace, which has no place in the workspace.  
 On a pasted tab, **Save…** sits at the top of the menu, and **Copy content to clipboard** copies the paste as it is now.  
 **Compare with…** and **Copy content to clipboard** show on the tab of every text file,
@@ -92,8 +95,10 @@ From left to right:
 - **Compare with…:** a chooser for the other side, then a new diff tab; see [Compare](Compare.md#the-compare-with-chooser).
 - **Actions** for the type and view: **Format**, **Minify** and **Convert to YAML** for JSON,
   **Format** and **Convert to JSON** for YAML, **Convert to JSON** for XML,
-  **Export HTML** and **Export PDF** for Markdown.
+  **Convert to Markdown** for HTML, and **Convert to HTML**, **Export HTML** and **Export PDF** for Markdown.
 - **Save**, or a **View only** badge for tables and documents.
+
+At 720 px wide or less, the toolbar keeps to one row and scrolls sideways, its actions included.
 
 Hovering a view tab shows what the view does where it isn't obvious, such as **Interactive**.  
 Clicking a view tab or an action keeps the focus in the editor; switching to another editor view moves the focus to its editor.
@@ -168,8 +173,8 @@ There is no bar in **Preview**, **Tree**, **JSONPath**, **Schema**, **XPath** or
 | --- | --- | --- |
 | `.json` | Editor, Tree, JSONPath, Schema | Format, Minify, Convert to YAML (Editor view) |
 | `.yaml`, `.yml` | Editor, Tree, JSONPath, Schema | Format, Convert to JSON (Editor view) |
-| `.md`, `.markdown`, `.mdx` | Editor, Interactive, Split, Preview | Export HTML, Export PDF |
-| `.html`, `.htm` | Editor, Interactive, Split, Preview | none |
+| `.md`, `.markdown`, `.mdx` | Editor, Interactive, Split, Preview | Convert to HTML, Export HTML, Export PDF |
+| `.html`, `.htm` | Editor, Interactive, Split, Preview | Convert to Markdown |
 | `.xml`, `.xsd`, `.xsl`, `.xslt`, `.config` | Editor, Tree, XPath, As JSON | Convert to JSON (Editor view) |
 | `.csv`, `.tsv`, `.xlsx`, `.xls`, `.xlsm`, `.xltx`, `.xltm`, `.xlsb`, `.ods` | Table | none, view only |
 | `.docx`, `.docm`, `.dotx`, `.dotm`, `.doc`, `.pdf` | no view tabs, the preview frame | Copy formatted for Word documents, view only |
@@ -274,14 +279,20 @@ inside a sandbox page that keeps the page away from the network and from the stu
 - Its scripts run as written: `<script>` elements, event handlers such as `onclick`, `javascript:` links,
   timers, `eval` and dialogs such as `alert`.
   Buttons, tabs, menus and other controls a script drives work,
-  such as the **Diff**, **Before** and **After** buttons, the change stepping and the side-by-side view
-  of a page saved by a Markdown compare's **Export HTML**.
+  such as the **Diff**, **Before** and **After** buttons, the change stepping, the side-by-side view,
+  **Copy Mermaid**, **Copy table** and **Enlarge** of a page saved by a Markdown compare's **Export HTML**.
+- A copy button of the page works: the page's `navigator.clipboard.writeText` or `write`,
+  with text, formatted text or a PNG picture, copies through the studio during a click or a key press in the page,
+  and a toast says `Copied from the page.`
+  A copy the page's script makes by itself copies nothing and fails as a refused copy does in a browser,
+  and the page can't read the clipboard.
 - The page can't reach the network, the studio, the workspace or the extension:
   the sandbox page has an origin of its own, with no `chrome` extension API,
-  no access to the studio's page, storage or files, and a content security policy that allows no connection at all;
+  no access to the studio's page, storage or files, and a content security policy that allows no connection to the network;
   see [Privacy](Privacy.md#markdown-and-html).
-  A `fetch`, a web image or font, a WebSocket or a script from the web added by the page's own script
+  A `fetch` of a web address, a web image or font, a WebSocket or a script from the web added by the page's own script
   is refused, and the browser's console for the frame says so.
+  A `fetch` of the page's own `data:` or `blob:` URL works, since it never leaves the page.
   WebRTC is taken away from the page before its scripts run.
 - The page has no frames or workers of its own:
   `<iframe>`, `<frame>`, `<object>` and `<embed>` elements in the file are left out.
@@ -323,6 +334,48 @@ inside a sandbox page that keeps the page away from the network and from the stu
 - An HTML file dropped from outside the workspace has no workspace folder: its style sheets and linked scripts are left out,
   its relative images show a placeholder, and its relative links say so in a toast.
   Its own inline scripts still run.
+
+### Convert to Markdown
+
+**Convert to Markdown** in the toolbar, in every view, and **Convert HTML to Markdown** in the Explorer and tab context menus,
+turn the page into Markdown in a tab of its own, named after the file, such as `page.html.converted.md`,
+which opens in **Editor**.  
+The toolbar button converts the editor's text, unsaved edits included;
+the menu command converts the tab's text when the file is open, and the file as saved on disk when it isn't.  
+The new tab isn't on disk until **Save** writes it next to the page, with the page's line endings,
+and converting again replaces its text.  
+Both are left out for a file from outside the workspace, which has no folder to save next to.  
+The page is cleaned with DOMPurify and read without running or loading anything in it, as Markdown's
+[paste](Markdown.md#paste-and-copy) does, and becomes CommonMark with GitHub's tables, strikethrough and task lists:
+
+- Kept as Markdown: headings, paragraphs, emphasis, bold, strikethrough and inline code;
+  fenced code blocks, with the language of a `language-` or `lang-` class;
+  numbered lists with their start, bulleted lists and task lists, from checkboxes or from `[ ]` and `[x]` written as text;
+  tables, with the first row as the header, column alignment, a caption as a paragraph above
+  and line breaks in a cell as `<br>`;
+  links, `#id` links and link titles, and images with their alt text and title,
+  with relative paths kept as written and `data:` images kept;
+  quotes, rules and line breaks.
+- Kept as HTML, which GitHub-flavoured Markdown shows: `<details>` with its `<summary>` as text and Markdown inside,
+  `<sub>`, `<sup>`, `<kbd>`, `<mark>` and `<ins>`.
+- Mermaid diagrams: a diagram on a page **Convert Markdown to HTML** wrote, which carries its source,
+  and a `<pre class="mermaid">` of a web page, become ` ```mermaid ` blocks.
+- Kept as text alone: what Markdown can't express, such as alignment, colours, fonts, underlines, classes and ids,
+  and the text of `<div>`, `<span>`, definition lists, figures and other elements; a figure's caption is a paragraph.
+- Dropped: the `<head>`, scripts, styles, comments, event handlers, `javascript:` links, `<noscript>`, frames, objects,
+  `<svg>`, `<canvas>`, video and audio, and the fields and buttons of forms,
+  whose labels and other text stay.
+- The page's `<title>` becomes the top heading when the page has no `<h1>`,
+  unless it repeats the first heading or the page is one **Convert Markdown to HTML** wrote,
+  whose title comes from its first heading or file name.
+- Text that Markdown would read as syntax is escaped with a backslash, and a page with no text gives an empty tab.
+
+Not supported:
+
+- What a page's scripts would draw: the page converts as written.
+- Nested tables, a cell spanning rows, and blocks inside a table cell, which GitHub's tables can't hold:
+  a cell's blocks join on one line, and a span leaves empty cells.
+- Style sheets: how a page's CSS shows its elements, such as a `<div>` styled as a heading, isn't read.
 
 ## Editing
 

@@ -34,6 +34,22 @@ export function copyFailureMessage(error: unknown): string {
     return `Could not copy: ${errorMessage(error)}`;
 }
 
+// Puts content of one or more types on the clipboard as one item, such as text with its HTML and a picture;
+// text alone goes as plain text.
+export async function copyTypesAsync(content: Readonly<Partial<Record<string, string | Blob>>>): Promise<void> {
+    const entries = Object.entries(content).filter((entry): entry is [string, string | Blob] => entry[1] != null);
+    const [only] = entries;
+
+    if (entries.length === 1 && only?.[0] === 'text/plain' && typeof only[1] === 'string') {
+        await copyTextAsync(only[1]);
+
+        return;
+    }
+
+    const types = Object.fromEntries(entries.map(([type, value]) => [type, () => value]));
+    await writeClipboardAsync(Promise.resolve(content), types);
+}
+
 // Puts text that is still being made on the clipboard, such as rows still being read from disk.
 export async function copyTextLaterAsync(text: Promise<string>): Promise<void> {
     await writeClipboardAsync(text, { 'text/plain': (value) => value });
